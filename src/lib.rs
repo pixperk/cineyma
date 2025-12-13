@@ -2,6 +2,7 @@ pub mod actor;
 pub mod address;
 pub mod context;
 pub mod envelope;
+pub mod error;
 pub mod message;
 pub mod system;
 
