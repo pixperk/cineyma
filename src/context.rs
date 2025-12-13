@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{Actor, Addr};
 
 ///Runtime context for an actor
