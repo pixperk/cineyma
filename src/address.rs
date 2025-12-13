@@ -30,6 +30,27 @@ impl<A: Actor> Addr<A> {
         rx.await.map_err(|_| MailboxError::MailboxClosed)
     }
 
+    pub async fn send_timeout<M>(
+        &self,
+        msg: M,
+        timeout: std::time::Duration,
+    ) -> Result<M::Result, MailboxError>
+    where
+        A: Handler<M>,
+        M: Message,
+    {
+        let (tx, rx) = oneshot::channel();
+        let envelope = MessageEnvelope::with_response(msg, tx);
+        self.sender
+            .send(Box::new(envelope))
+            .map_err(|_| MailboxError::MailboxClosed)?;
+
+        match tokio::time::timeout(timeout, rx).await {
+            Ok(res) => res.map_err(|_| MailboxError::MailboxClosed),
+            Err(_) => Err(MailboxError::Timeout),
+        }
+    }
+
     ///Fire and forget message sending
     pub fn do_send<M>(&self, msg: M)
     where

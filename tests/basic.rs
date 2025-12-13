@@ -1,9 +1,12 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 
-use cinema::{Actor, ActorSystem, Context, Handler, Message};
+use cinema::{Actor, ActorSystem, Context, Handler, MailboxError, Message};
 
 struct Ping;
 impl Message for Ping {
@@ -73,4 +76,28 @@ async fn request_response() {
 
     let result = addr.send(Add(20, 22)).await.unwrap();
     assert_eq!(result, 42);
+}
+
+#[tokio::test]
+async fn send_to_stopped_actor_fails() {
+    let sys = ActorSystem::new();
+    let addr = sys.spawn(Calculator);
+
+    // Give actor time to start
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    // Shutdown the system
+    sys.shutdown();
+
+    // Give actor time to fully stop and drop rx
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Drop sys so the task can fully clean up
+    drop(sys);
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    // Actor is dead, should fail
+    let result = addr.send(Add(1, 2)).await;
+    assert!(result.is_err());
+    assert_eq!(result.err().unwrap(), MailboxError::MailboxClosed);
 }

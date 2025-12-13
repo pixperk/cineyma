@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum MailboxError {
     ///Actor's mailbox is closed (actor has stopped)
     MailboxClosed,
