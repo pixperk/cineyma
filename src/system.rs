@@ -43,7 +43,8 @@ where
 {
     let (tx, mut rx) = mpsc::unbounded_channel::<Box<dyn Envelope<A>>>();
     let addr = Addr::new(tx);
-    let mut ctx = Context::new(addr.clone());
+    let stop_signal = Arc::new(Notify::new());
+    let mut ctx = Context::with_stop_signal(addr.clone(), stop_signal.clone());
 
     tokio::spawn(async move {
         //actor lifecycle start
@@ -66,6 +67,10 @@ where
 
                 _ = shutdown.notified() => {
                     //shutdown signal received, exit loop
+                    break;
+                }
+                _ = stop_signal.notified() => {
+                    //stop signal received, exit loop
                     break;
                 }
             }
