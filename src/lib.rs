@@ -1,43 +1,65 @@
 pub mod actor;
 pub mod address;
 pub mod context;
+pub mod envelope;
 pub mod message;
+pub mod runner;
 
 pub use actor::{Actor, Handler};
 pub use address::Addr;
 pub use context::Context;
 pub use message::Message;
+pub use runner::spawn;
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
     use super::*;
 
-    struct Greet(String);
-
-    impl Message for Greet {
-        type Result = String;
+    struct Ping;
+    impl Message for Ping {
+        type Result = ();
     }
 
-    //Actor
-    struct Greeter {
-        prefix: String,
+    struct PingActor {
+        count: Arc<AtomicUsize>,
     }
 
-    impl Actor for Greeter {}
+    impl Actor for PingActor {
+        fn started(&mut self, _ctx: &mut Context<Self>) {
+            println!("PingActor started");
+        }
 
-    impl Handler<Greet> for Greeter {
-        fn handle(&mut self, msg: Greet, _ctx: &mut Context<Self>) -> String {
-            format!("{}, {}!", self.prefix, msg.0)
+        fn stopped(&mut self, _ctx: &mut Context<Self>) {
+            println!("PingActor stopped");
         }
     }
-    #[test]
-    fn actor_compiles() {
-        let mut greeter = Greeter {
-            prefix: "Hello".into(),
-        };
-        let mut ctx = Context::new();
 
-        let result = greeter.handle(Greet("World".into()), &mut ctx);
-        assert_eq!(result, "Hello, World!");
+    impl Handler<Ping> for PingActor {
+        fn handle(&mut self, _msg: Ping, _ctx: &mut Context<Self>) -> <Ping as Message>::Result {
+            self.count.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[tokio::test]
+    async fn send_message() {
+        let count = Arc::new(AtomicUsize::new(0));
+        let actor = PingActor {
+            count: count.clone(),
+        };
+        let addr = spawn(actor);
+
+        for _ in 0..10 {
+            addr.do_send(Ping);
+        }
+
+        //give some time for messages to be processed
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        assert_eq!(count.load(Ordering::SeqCst), 10);
     }
 }
