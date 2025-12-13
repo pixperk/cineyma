@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures::FutureExt;
 use tokio::sync::{mpsc, Notify};
 
 use crate::{actor::ActorId, envelope::ActorMessage, Actor, Addr, Context};
@@ -56,37 +57,37 @@ where
         actor.started(&mut ctx);
 
         let panic_occured = loop {
-            tokio::select!(@{
-                start = {
-                    tokio::macros::support::thread_rng_n(BRANCHES)
-                };
-                ()
-            }msg = rx.recv() => {
-                match msg {
-                    Some(actor_msg) => {
-                        let result = match actor_msg {
-                            ActorMessage::Sync(envelope) => {
-                                catch_unwind(AssertUnwindSafe(||{
-                                    envelope.handle(&mut actor, &mut ctx)
-                                }))
-                            },ActorMessage::Async(envelope) => {
-                                let fut = envelope.handle(&mut actor, &mut ctx);
-                                fut.await;
-                                Ok(())
-                            },
-                        };
-                        if result.is_err(){
-                            break true;
+            tokio::select! {
+                msg = rx.recv() => {
+                    match msg {
+                        Some(actor_msg) => {
+                            let result = match actor_msg {
+                                ActorMessage::Sync(envelope) => {
+                                    catch_unwind(AssertUnwindSafe(|| {
+                                        envelope.handle(&mut actor, &mut ctx)
+                                    }))
+                                }
+                                ActorMessage::Async(envelope) => {
+                                    let fut = envelope.handle(&mut actor, &mut ctx);
+                                    AssertUnwindSafe(fut).catch_unwind().await
+                                }
+                            };
+                            if result.is_err() {
+                                break true;
+                            }
                         }
-                    },None => {
-                        break false;
+                        None => {
+                            break false;
+                        }
                     }
                 }
-            }_ = shutdown.notified() => {
-                break false;
-            }_ = stop_signal.notified() => {
-                break false;
-            })
+                _ = shutdown.notified() => {
+                    break false;
+                }
+                _ = stop_signal.notified() => {
+                    break false;
+                }
+            }
         };
 
         if panic_occured {
