@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::sync::Notify;
 
-use crate::{actor::ActorId, message::Terminated, Actor, Addr, Handler, Message};
+use crate::{actor::ActorId, message::Terminated, Actor, Addr, Handler, Message, TimerHandle};
 
 ///Runtime context for an actor
 pub struct Context<A: Actor> {
@@ -55,35 +55,49 @@ impl<A: Actor> Context<A> {
         addr.watch(self.addr.clone());
     }
 
-    ///send a message to self after delay
-    pub fn run_later<M>(&self, delay: Duration, msg: M)
+    /// Send a message to self after delay
+    /// Returns a TimerHandle that can be used to cancel the timer
+    pub fn run_later<M>(&self, delay: Duration, msg: M) -> TimerHandle
     where
         M: Message,
         A: Handler<M>,
     {
         let addr = self.addr.clone();
+        let handle = TimerHandle::new();
+        let handle_clone = handle.clone();
+
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
-            addr.do_send(msg);
+            if !handle_clone.is_cancelled() {
+                addr.do_send(msg);
+            }
         });
+
+        handle
     }
 
     /// Send a message to self repeatedly at fixed intervals
-    pub fn run_interval<M>(&self, interval: Duration, msg: M)
+    /// Returns a TimerHandle that can be used to cancel the interval
+    pub fn run_interval<M>(&self, interval: Duration, msg: M) -> TimerHandle
     where
         M: Message + Clone,
         A: Handler<M>,
     {
         let addr = self.addr.clone();
+        let handle = TimerHandle::new();
+        let handle_clone = handle.clone();
+
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(interval);
             loop {
                 ticker.tick().await;
-                if !addr.is_alive() {
+                if !addr.is_alive() || handle_clone.is_cancelled() {
                     break;
                 }
                 addr.do_send(msg.clone());
             }
         });
+
+        handle
     }
 }

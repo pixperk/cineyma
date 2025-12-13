@@ -6,6 +6,7 @@ pub mod error;
 pub mod message;
 pub mod supervisor;
 pub mod system;
+pub mod timer;
 pub mod watcher;
 
 pub use actor::{Actor, Handler};
@@ -15,3 +16,4 @@ pub use error::MailboxError;
 pub use message::Message;
 pub use supervisor::SupervisorStrategy;
 pub use system::ActorSystem;
+pub use timer::TimerHandle;
