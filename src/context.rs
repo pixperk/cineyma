@@ -1,8 +1,8 @@
-use std::{ops::Add, sync::Arc};
+use std::{sync::Arc, time::Duration};
 
 use tokio::sync::Notify;
 
-use crate::{actor::ActorId, message::Terminated, watcher::Watcher, Actor, Addr, Handler};
+use crate::{actor::ActorId, message::Terminated, Actor, Addr, Handler, Message};
 
 ///Runtime context for an actor
 pub struct Context<A: Actor> {
@@ -53,5 +53,37 @@ impl<A: Actor> Context<A> {
         A: Handler<Terminated>,
     {
         addr.watch(self.addr.clone());
+    }
+
+    ///send a message to self after delay
+    pub fn run_later<M>(&self, delay: Duration, msg: M)
+    where
+        M: Message,
+        A: Handler<M>,
+    {
+        let addr = self.addr.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            addr.do_send(msg);
+        });
+    }
+
+    /// Send a message to self repeatedly at fixed intervals
+    pub fn run_interval<M>(&self, interval: Duration, msg: M)
+    where
+        M: Message + Clone,
+        A: Handler<M>,
+    {
+        let addr = self.addr.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            loop {
+                ticker.tick().await;
+                if !addr.is_alive() {
+                    break;
+                }
+                addr.do_send(msg.clone());
+            }
+        });
     }
 }

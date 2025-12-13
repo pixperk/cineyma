@@ -1,7 +1,6 @@
 use std::{
-    ops::Add,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, Ordering},
         Arc,
     },
     time::Duration,
@@ -82,11 +81,6 @@ async fn actor_continues_after_normal_messages() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     assert!(stopped_called.load(Ordering::SeqCst));
-}
-
-struct WatchMe;
-impl Message for WatchMe {
-    type Result = ();
 }
 
 struct Die;
