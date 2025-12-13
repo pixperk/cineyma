@@ -1,4 +1,8 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use crate::{Context, Message};
 
@@ -31,4 +35,12 @@ impl Default for ActorId {
 /// One actor can handle multiple message types
 pub trait Handler<M: Message>: Actor {
     fn handle(&mut self, msg: M, ctx: &mut Context<Self>) -> M::Result;
+}
+
+///return type for async functions in actors
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+///async version of Handler trait
+pub trait AsyncHandler<M: Message>: Actor {
+    fn handle(&mut self, msg: M, ctx: &mut Context<Self>) -> BoxFuture<'_, M::Result>;
 }

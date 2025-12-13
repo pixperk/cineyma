@@ -6,7 +6,10 @@ use std::{
     time::Duration,
 };
 
-use cinema::{Actor, ActorSystem, Context, Handler, MailboxError, Message, TimerHandle};
+use cinema::{
+    actor::{AsyncHandler, BoxFuture},
+    Actor, ActorSystem, Context, Handler, MailboxError, Message, TimerHandle,
+};
 
 struct Ping;
 impl Message for Ping {
@@ -347,4 +350,64 @@ async fn cancelled_interval_stops_firing() {
         count_at_cancel, count_after,
         "Count should not increase after cancel"
     );
+}
+
+struct FetchData;
+impl Message for FetchData {
+    type Result = String;
+}
+
+struct AsyncActor;
+
+impl Actor for AsyncActor {}
+
+impl AsyncHandler<FetchData> for AsyncActor {
+    fn handle(&mut self, _msg: FetchData, _ctx: &mut Context<Self>) -> BoxFuture<'_, String> {
+        Box::pin(async move {
+            // Simulate async work (like a network request)
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            "data fetched".to_string()
+        })
+    }
+}
+
+#[tokio::test]
+async fn async_handler_returns_response() {
+    let sys = ActorSystem::new();
+    let addr = sys.spawn(AsyncActor);
+
+    let result = addr.send_async(FetchData).await.unwrap();
+    assert_eq!(result, "data fetched");
+}
+
+#[tokio::test]
+async fn async_handler_fire_and_forget() {
+    let count = Arc::new(AtomicU32::new(0));
+
+    struct AsyncIncrement(Arc<AtomicU32>);
+    impl Message for AsyncIncrement {
+        type Result = ();
+    }
+
+    struct CounterActor;
+    impl Actor for CounterActor {}
+
+    impl AsyncHandler<AsyncIncrement> for CounterActor {
+        fn handle(&mut self, msg: AsyncIncrement, _ctx: &mut Context<Self>) -> BoxFuture<'_, ()> {
+            Box::pin(async move {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                msg.0.fetch_add(1, Ordering::SeqCst);
+            })
+        }
+    }
+
+    let sys = ActorSystem::new();
+    let addr = sys.spawn(CounterActor);
+
+    addr.do_send_async(AsyncIncrement(count.clone()));
+
+    // Wait for async handler to complete
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    assert_eq!(count.load(Ordering::SeqCst), 1);
 }

@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    actor::ActorId,
-    envelope::{Envelope, MessageEnvelope},
+    actor::{ActorId, AsyncHandler},
+    envelope::{ActorMessage, AsyncMessageEnvelope, MessageEnvelope},
     error::MailboxError,
     message::Terminated,
     watcher::Watcher,
@@ -12,13 +12,13 @@ use crate::{
 };
 
 pub struct Addr<A: Actor> {
-    sender: mpsc::UnboundedSender<Box<dyn Envelope<A>>>,
+    sender: mpsc::UnboundedSender<ActorMessage<A>>,
     id: ActorId,
     watchers: Arc<Mutex<Vec<Arc<dyn Watcher>>>>,
 }
 
 impl<A: Actor> Addr<A> {
-    pub fn new(sender: mpsc::UnboundedSender<Box<dyn Envelope<A>>>, id: ActorId) -> Self {
+    pub fn new(sender: mpsc::UnboundedSender<ActorMessage<A>>, id: ActorId) -> Self {
         Self {
             sender,
             id,
@@ -39,7 +39,7 @@ impl<A: Actor> Addr<A> {
         let (tx, rx) = oneshot::channel();
         let envelope = MessageEnvelope::with_response(msg, tx);
         self.sender
-            .send(Box::new(envelope))
+            .send(ActorMessage::Sync(Box::new(envelope)))
             .map_err(|_| MailboxError::MailboxClosed)?;
 
         rx.await.map_err(|_| MailboxError::MailboxClosed)
@@ -57,7 +57,7 @@ impl<A: Actor> Addr<A> {
         let (tx, rx) = oneshot::channel();
         let envelope = MessageEnvelope::with_response(msg, tx);
         self.sender
-            .send(Box::new(envelope))
+            .send(ActorMessage::Sync(Box::new(envelope)))
             .map_err(|_| MailboxError::MailboxClosed)?;
 
         match tokio::time::timeout(timeout, rx).await {
@@ -73,7 +73,31 @@ impl<A: Actor> Addr<A> {
         M: Message,
     {
         let envelope = MessageEnvelope::new(msg);
-        let _ = self.sender.send(Box::new(envelope));
+        let _ = self.sender.send(ActorMessage::Sync(Box::new(envelope)));
+    }
+
+    /// Fire and forget for async handlers
+    pub fn do_send_async<M>(&self, msg: M)
+    where
+        A: AsyncHandler<M>,
+        M: Message,
+    {
+        let envelope = AsyncMessageEnvelope::new(msg);
+        let _ = self.sender.send(ActorMessage::Async(Box::new(envelope)));
+    }
+
+    /// Send and wait for response from async handler
+    pub async fn send_async<M>(&self, msg: M) -> Result<M::Result, MailboxError>
+    where
+        A: AsyncHandler<M>,
+        M: Message,
+    {
+        let (tx, rx) = oneshot::channel();
+        let envelope = AsyncMessageEnvelope::with_response(msg, tx);
+        self.sender
+            .send(ActorMessage::Async(Box::new(envelope)))
+            .map_err(|_| MailboxError::MailboxClosed)?;
+        rx.await.map_err(|_| MailboxError::MailboxClosed)
     }
 
     ///Check if the actor is still alive

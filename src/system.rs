@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, Notify};
 
-use crate::{actor::ActorId, envelope::Envelope, Actor, Addr, Context};
+use crate::{actor::ActorId, envelope::ActorMessage, Actor, Addr, Context};
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -43,7 +43,7 @@ fn spawn_with_shutdown<A>(mut actor: A, shutdown: Arc<Notify>) -> Addr<A>
 where
     A: Actor,
 {
-    let (tx, mut rx) = mpsc::unbounded_channel::<Box<dyn Envelope<A>>>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<ActorMessage<A>>();
     let id = ActorId::new();
     let addr = Addr::new(tx, id);
     let stop_signal = Arc::new(Notify::new());
@@ -56,37 +56,37 @@ where
         actor.started(&mut ctx);
 
         let panic_occured = loop {
-            tokio::select! {
-                //message processing loop
-                msg = rx.recv() => {
-                    match msg{
-                        Some(envelope) => {
-                            let result =   catch_unwind(AssertUnwindSafe(|| {
-                                envelope.handle(&mut actor, &mut ctx);
-                            }));
-
-                            if result.is_err() {
-                                //panic occurred during message handling
-                                break true;
-                            }
-
-                        },
-                        None => {
-                            //channel closed, exit loop
-                            break false;
+            tokio::select!(@{
+                start = {
+                    tokio::macros::support::thread_rng_n(BRANCHES)
+                };
+                ()
+            }msg = rx.recv() => {
+                match msg {
+                    Some(actor_msg) => {
+                        let result = match actor_msg {
+                            ActorMessage::Sync(envelope) => {
+                                catch_unwind(AssertUnwindSafe(||{
+                                    envelope.handle(&mut actor, &mut ctx)
+                                }))
+                            },ActorMessage::Async(envelope) => {
+                                let fut = envelope.handle(&mut actor, &mut ctx);
+                                fut.await;
+                                Ok(())
+                            },
+                        };
+                        if result.is_err(){
+                            break true;
                         }
+                    },None => {
+                        break false;
                     }
                 }
-
-                _ = shutdown.notified() => {
-                    //shutdown signal received, exit loop
-                    break false;
-                }
-                _ = stop_signal.notified() => {
-                    //stop signal received, exit loop
-                    break false;
-                }
-            }
+            }_ = shutdown.notified() => {
+                break false;
+            }_ = stop_signal.notified() => {
+                break false;
+            })
         };
 
         if panic_occured {
