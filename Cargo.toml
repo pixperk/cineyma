@@ -5,3 +5,11 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+
+[[test]]
+name = "basic"
+path = "tests/basic.rs"
+
+[[test]]
+name = "system"
+path = "tests/system.rs"
