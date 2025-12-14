@@ -2,28 +2,48 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::sync::Notify;
 
-use crate::{actor::ActorId, message::Terminated, Actor, Addr, Handler, Message, TimerHandle};
+use crate::{
+    actor::ActorId, address::ChildHandle, message::Terminated, Actor, Addr, Handler, Message,
+    TimerHandle,
+};
 
 ///Runtime context for an actor
 pub struct Context<A: Actor> {
     addr: Addr<A>,
     ///signal to stop the actor
     stop_signal: Option<Arc<Notify>>,
+    shutdown: Arc<Notify>,
+    children: Vec<Box<dyn ChildHandle>>,
 }
 
 impl<A: Actor> Context<A> {
-    pub fn new(addr: Addr<A>) -> Self {
+    pub fn new(addr: Addr<A>, shutdown: Arc<Notify>) -> Self {
         Self {
             addr,
             stop_signal: None,
+            shutdown,
+            children: Vec::new(),
         }
     }
 
     ///configure the context with a stop signal for graceful shutdown
-    pub fn with_stop_signal(addr: Addr<A>, stop_signal: Arc<Notify>) -> Self {
+    pub fn with_stop_signal(
+        addr: Addr<A>,
+        stop_signal: Arc<Notify>,
+        shutdown: Arc<Notify>,
+    ) -> Self {
         Self {
             addr,
             stop_signal: Some(stop_signal),
+            shutdown,
+            children: Vec::new(),
+        }
+    }
+
+    ///Stop all child actors (when this actor stops)
+    pub fn stop_children(&mut self) {
+        for child in &self.children {
+            child.stop();
         }
     }
 

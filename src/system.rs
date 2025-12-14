@@ -46,9 +46,12 @@ where
 {
     let (tx, mut rx) = mpsc::unbounded_channel::<ActorMessage<A>>();
     let id = ActorId::new();
-    let addr = Addr::new(tx, id);
+
     let stop_signal = Arc::new(Notify::new());
-    let mut ctx = Context::with_stop_signal(addr.clone(), stop_signal.clone());
+
+    let addr = Addr::new(tx, id, stop_signal.clone());
+
+    let mut ctx = Context::with_stop_signal(addr.clone(), stop_signal.clone(), shutdown.clone());
 
     let addr_for_notify = addr.clone();
 
@@ -97,6 +100,9 @@ where
 
         //notify watchers about termination
         addr_for_notify.notify_watchers();
+
+        //stop all child actors
+        ctx.stop_children();
 
         //actor lifecycle stop
         actor.stopped(&mut ctx);
