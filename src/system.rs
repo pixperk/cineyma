@@ -59,6 +59,8 @@ where
         //actor lifecycle start
         actor.started(&mut ctx);
 
+        let escalate_signal = ctx.escalate_signal();
+
         let panic_occured = loop {
             tokio::select! {
                 msg = rx.recv() => {
@@ -89,6 +91,11 @@ where
                 }
                 _ = stop_signal.notified() => {
                     break false;
+                }
+                _ = escalate_signal.notified() => {
+                    //escalation requested, we treat it as panic for top-level actors
+                    eprintln!("Actor received escalation signal. Treating as panic.");
+                    break true;
                 }
             }
         };

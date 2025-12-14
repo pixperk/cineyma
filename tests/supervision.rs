@@ -401,3 +401,122 @@ async fn actor_stops_after_max_restarts() {
     );
     assert!(!worker.is_alive(), "Worker should be dead");
 }
+
+// ======== Escalate Strategy Tests ========
+
+/// child panic causes parent to "panic",
+/// which triggers grandparent's restart strategy
+#[tokio::test]
+async fn escalate_triggers_parent_restart() {
+    // Track how many times Parent gets started (should be 2: initial + 1 restart)
+    static PARENT_START_COUNT: AtomicU32 = AtomicU32::new(0);
+    // Track how many times Child gets started
+    static CHILD_START_COUNT: AtomicU32 = AtomicU32::new(0);
+
+    // Grandchild that panics
+    struct Grandchild;
+    impl Actor for Grandchild {
+        fn started(&mut self, _ctx: &mut Context<Self>) {
+            CHILD_START_COUNT.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    struct CrashMsg;
+    impl Message for CrashMsg {
+        type Result = ();
+    }
+
+    impl Handler<CrashMsg> for Grandchild {
+        fn handle(&mut self, _msg: CrashMsg, _ctx: &mut Context<Self>) {
+            panic!("Grandchild crash to test escalate!");
+        }
+    }
+
+    // Parent spawns Grandchild with Escalate strategy
+    struct Parent {
+        grandchild: Option<Addr<Grandchild>>,
+    }
+
+    impl Actor for Parent {
+        fn started(&mut self, ctx: &mut Context<Self>) {
+            PARENT_START_COUNT.fetch_add(1, Ordering::SeqCst);
+            // Parent spawns grandchild with Escalate strategy
+            self.grandchild =
+                Some(ctx.spawn_child_with_strategy(|| Grandchild, SupervisorStrategy::Escalate));
+        }
+    }
+
+    impl Handler<Terminated> for Parent {
+        fn handle(&mut self, _msg: Terminated, _ctx: &mut Context<Self>) {}
+    }
+
+    // Message to crash the grandchild via parent
+    struct CrashGrandchild;
+    impl Message for CrashGrandchild {
+        type Result = ();
+    }
+
+    impl Handler<CrashGrandchild> for Parent {
+        fn handle(&mut self, _msg: CrashGrandchild, _ctx: &mut Context<Self>) {
+            if let Some(ref gc) = self.grandchild {
+                gc.do_send(CrashMsg);
+            }
+        }
+    }
+
+    // Grandparent spawns Parent with Restart strategy
+    struct Grandparent;
+    impl Actor for Grandparent {}
+
+    impl Handler<Terminated> for Grandparent {
+        fn handle(&mut self, _msg: Terminated, _ctx: &mut Context<Self>) {}
+    }
+
+    struct SpawnParent;
+    impl Message for SpawnParent {
+        type Result = Addr<Parent>;
+    }
+
+    impl Handler<SpawnParent> for Grandparent {
+        fn handle(&mut self, _msg: SpawnParent, ctx: &mut Context<Self>) -> Addr<Parent> {
+            ctx.spawn_child_with_strategy(
+                || Parent { grandchild: None },
+                SupervisorStrategy::restart(3, Duration::from_secs(10)),
+            )
+        }
+    }
+
+    let sys = ActorSystem::new();
+    let grandparent = sys.spawn(Grandparent);
+
+    let parent = grandparent.send(SpawnParent).await.unwrap();
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    assert_eq!(
+        PARENT_START_COUNT.load(Ordering::SeqCst),
+        1,
+        "Parent should have started once"
+    );
+    assert_eq!(
+        CHILD_START_COUNT.load(Ordering::SeqCst),
+        1,
+        "Grandchild should have started once"
+    );
+
+    parent.do_send(CrashGrandchild);
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    assert_eq!(
+        PARENT_START_COUNT.load(Ordering::SeqCst),
+        2,
+        "Parent should have been restarted by grandparent"
+    );
+
+    assert_eq!(
+        CHILD_START_COUNT.load(Ordering::SeqCst),
+        2,
+        "Grandchild should have been recreated with new parent"
+    );
+}

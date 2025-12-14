@@ -19,6 +19,7 @@ pub struct Context<A: Actor> {
     stop_signal: Option<Arc<Notify>>,
     shutdown: Arc<Notify>,
     children: Vec<Box<dyn ChildHandle>>,
+    escalate_signal: Arc<Notify>,
 }
 
 impl<A: Actor> Context<A> {
@@ -28,6 +29,7 @@ impl<A: Actor> Context<A> {
             stop_signal: None,
             shutdown,
             children: Vec::new(),
+            escalate_signal: Arc::new(Notify::new()),
         }
     }
 
@@ -42,7 +44,29 @@ impl<A: Actor> Context<A> {
             stop_signal: Some(stop_signal),
             shutdown,
             children: Vec::new(),
+            escalate_signal: Arc::new(Notify::new()),
         }
+    }
+
+    ///configure the context with custom signals
+    pub fn with_signals(
+        addr: Addr<A>,
+        stop_signal: Arc<Notify>,
+        shutdown: Arc<Notify>,
+        escalate_signal: Arc<Notify>,
+    ) -> Self {
+        Self {
+            addr,
+            stop_signal: Some(stop_signal),
+            shutdown,
+            children: Vec::new(),
+            escalate_signal,
+        }
+    }
+
+    ///Get the escalate signal for this actor
+    pub fn escalate_signal(&self) -> Arc<Notify> {
+        self.escalate_signal.clone()
     }
 
     ///Stop all child actors (when this actor stops)
@@ -161,6 +185,8 @@ impl<A: Actor> Context<A> {
         let shutdown = self.shutdown.clone();
         let child_addr_for_notify = child_addr.clone();
 
+        let parent_escalate_signal = self.escalate_signal.clone();
+
         tokio::spawn(async move {
             let mut tracker = match &strategy {
                 SupervisorStrategy::Restart {
@@ -180,32 +206,38 @@ impl<A: Actor> Context<A> {
 
                 child.started(&mut child_ctx);
 
+                let child_escalate_signal = child_ctx.escalate_signal();
+
                 let panic_occurred = loop {
                     tokio::select! {
-                        msg = rx.recv() => {
-                            match msg {
-                                Some(actor_msg) => {
-                                    let result = match actor_msg {
-                                        ActorMessage::Sync(envelope) => {
-                                            catch_unwind(AssertUnwindSafe(|| {
-                                                envelope.handle(&mut child, &mut child_ctx)
-                                            }))
+                                    msg = rx.recv() => {
+                                        match msg {
+                                            Some(actor_msg) => {
+                                                let result = match actor_msg {
+                                                    ActorMessage::Sync(envelope) => {
+                                                        catch_unwind(AssertUnwindSafe(|| {
+                                                            envelope.handle(&mut child, &mut child_ctx)
+                                                        }))
+                                                    }
+                                                    ActorMessage::Async(envelope) => {
+                                                        let fut = envelope.handle(&mut child, &mut child_ctx);
+                                                        AssertUnwindSafe(fut).catch_unwind().await
+                                                    }
+                                                };
+                                                if result.is_err() {
+                                                    break true;
+                                                }
+                                            }
+                                            None => break false,
                                         }
-                                        ActorMessage::Async(envelope) => {
-                                            let fut = envelope.handle(&mut child, &mut child_ctx);
-                                            AssertUnwindSafe(fut).catch_unwind().await
-                                        }
-                                    };
-                                    if result.is_err() {
-                                        break true;
                                     }
-                                }
-                                None => break false,
-                            }
-                        }
-                        _ = shutdown.notified() => break false,
-                        _ = child_stop_signal.notified() => break false,
+                                    _ = shutdown.notified() => break false,
+                                    _ = child_stop_signal.notified() => break false,
+                                    _ = child_escalate_signal.notified() => {
+                        eprintln!("Child received escalate from grandchild.");
+                        break true;
                     }
+                                }
                 };
 
                 child_ctx.stop_children();
@@ -229,7 +261,8 @@ impl<A: Actor> Context<A> {
                             }
                         }
                         SupervisorStrategy::Escalate => {
-                            eprintln!("Child panicked. Strategy: Escalate (TODO).");
+                            eprintln!("Child panicked. Strategy: Escalate. Notifying parent.");
+                            parent_escalate_signal.notify_one();
                             break 'restart;
                         }
                     }
