@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, Notify};
 
 use crate::{
     actor::{ActorId, AsyncHandler},
@@ -11,18 +11,33 @@ use crate::{
     Actor, Handler, Message,
 };
 
+///Type erased handle to control a child actor
+pub trait ChildHandle: Send + Sync {
+    fn stop(&self);
+    fn is_alive(&self) -> bool;
+}
+
+///Address of an actor
+/// Allows sending messages to the actor
+/// Also allows registering watchers to be notified when the actor stops
 pub struct Addr<A: Actor> {
     sender: mpsc::UnboundedSender<ActorMessage<A>>,
     id: ActorId,
     watchers: Arc<Mutex<Vec<Arc<dyn Watcher>>>>,
+    stop_signal: Arc<Notify>,
 }
 
 impl<A: Actor> Addr<A> {
-    pub fn new(sender: mpsc::UnboundedSender<ActorMessage<A>>, id: ActorId) -> Self {
+    pub fn new(
+        sender: mpsc::UnboundedSender<ActorMessage<A>>,
+        id: ActorId,
+        stop_signal: Arc<Notify>,
+    ) -> Self {
         Self {
             sender,
             id,
             watchers: Arc::new(Mutex::new(Vec::new())),
+            stop_signal,
         }
     }
 
@@ -129,6 +144,7 @@ impl<A: Actor> Clone for Addr<A> {
             sender: self.sender.clone(),
             id: self.id,
             watchers: self.watchers.clone(),
+            stop_signal: self.stop_signal.clone(),
         }
     }
 }
@@ -139,5 +155,15 @@ where
 {
     fn notify(&self, id: ActorId) {
         self.do_send(Terminated { id });
+    }
+}
+
+impl<A: Actor> ChildHandle for Addr<A> {
+    fn stop(&self) {
+        self.stop_signal.notify_one();
+    }
+
+    fn is_alive(&self) -> bool {
+        !self.sender.is_closed()
     }
 }
