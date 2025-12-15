@@ -4,6 +4,7 @@ pub mod context;
 pub mod envelope;
 pub mod error;
 pub mod message;
+pub mod stream;
 pub mod supervisor;
 pub mod system;
 pub mod timer;

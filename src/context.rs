@@ -1,15 +1,21 @@
 use std::{
     panic::{catch_unwind, AssertUnwindSafe},
+    pin::Pin,
     sync::Arc,
     time::Duration,
 };
 
-use futures::FutureExt;
+use futures::{FutureExt, Stream};
 use tokio::sync::{mpsc, Notify};
 
 use crate::{
-    actor::ActorId, address::ChildHandle, envelope::ActorMessage, message::Terminated,
-    supervisor::RestartTracker, Actor, Addr, Handler, Message, SupervisorStrategy, TimerHandle,
+    actor::{ActorId, StreamHandler},
+    address::ChildHandle,
+    envelope::ActorMessage,
+    message::Terminated,
+    stream::{ActorStream, StreamWrapper},
+    supervisor::RestartTracker,
+    Actor, Addr, Handler, Message, SupervisorStrategy, TimerHandle,
 };
 
 ///Runtime context for an actor
@@ -20,6 +26,7 @@ pub struct Context<A: Actor> {
     shutdown: Arc<Notify>,
     children: Vec<Box<dyn ChildHandle>>,
     escalate_signal: Arc<Notify>,
+    streams: Vec<Pin<Box<dyn ActorStream<A>>>>,
 }
 
 impl<A: Actor> Context<A> {
@@ -30,6 +37,7 @@ impl<A: Actor> Context<A> {
             shutdown,
             children: Vec::new(),
             escalate_signal: Arc::new(Notify::new()),
+            streams: Vec::new(),
         }
     }
 
@@ -45,6 +53,7 @@ impl<A: Actor> Context<A> {
             shutdown,
             children: Vec::new(),
             escalate_signal: Arc::new(Notify::new()),
+            streams: Vec::new(),
         }
     }
 
@@ -61,6 +70,7 @@ impl<A: Actor> Context<A> {
             shutdown,
             children: Vec::new(),
             escalate_signal,
+            streams: Vec::new(),
         }
     }
 
@@ -281,5 +291,27 @@ impl<A: Actor> Context<A> {
         self.children.push(Box::new(child_addr.clone()));
 
         child_addr
+    }
+
+    /// Add a stream to be handled by this actor
+    pub fn add_stream<S, I>(&mut self, stream: S)
+    where
+        S: Stream<Item = I> + Send + Unpin + 'static,
+        I: Send + 'static + Unpin,
+        A: StreamHandler<I>,
+    {
+        let wrapper = StreamWrapper::new(stream);
+        self.streams.push(Box::pin(wrapper));
+    }
+
+    /// Take the streams out of the context (avoids borrow issues)
+    pub fn take_streams(&mut self) -> Vec<Pin<Box<dyn ActorStream<A>>>> {
+        std::mem::take(&mut self.streams)
+    }
+
+    /// Return streams back to the context, and add new ones if any
+    pub fn return_streams(&mut self, mut streams: Vec<Pin<Box<dyn ActorStream<A>>>>) {
+        streams.append(&mut self.streams);
+        self.streams = streams;
     }
 }

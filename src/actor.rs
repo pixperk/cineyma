@@ -9,8 +9,8 @@ use crate::{Context, Message};
 //it is an entity which has own state, also
 //it's size is to be known during compile time
 pub trait Actor: Send + Sized + 'static {
-    fn started(&mut self, ctx: &mut Context<Self>) {}
-    fn stopped(&mut self, ctx: &mut Context<Self>) {}
+    fn started(&mut self, _ctx: &mut Context<Self>) {}
+    fn stopped(&mut self, _ctx: &mut Context<Self>) {}
 }
 
 /// Unique identifier for an actor
@@ -43,4 +43,13 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 ///async version of Handler trait
 pub trait AsyncHandler<M: Message>: Actor {
     fn handle(&mut self, msg: M, ctx: &mut Context<Self>) -> BoxFuture<'_, M::Result>;
+}
+
+///handler for stream items
+pub trait StreamHandler<I>: Actor
+where
+    I: Send + 'static,
+{
+    fn handle(&mut self, item: I, ctx: &mut Context<Self>);
+    fn finished(&mut self, _ctx: &mut Context<Self>) {}
 }
