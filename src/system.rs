@@ -4,7 +4,10 @@ use std::task::Poll;
 use futures::FutureExt;
 use tokio::sync::{mpsc, Notify};
 
-use crate::{actor::ActorId, envelope::ActorMessage, stream::poll_streams, Actor, Addr, Context};
+use crate::{
+    actor::ActorId, envelope::ActorMessage, registry::Registry, stream::poll_streams, Actor, Addr,
+    Context,
+};
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -12,12 +15,15 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 pub struct ActorSystem {
     //shared notify for graceful shutdown
     shutdown: Arc<Notify>,
+    ///actor registry
+    registry: Arc<Registry>,
 }
 
 impl ActorSystem {
     pub fn new() -> Self {
         Self {
             shutdown: Arc::new(Notify::new()),
+            registry: Arc::new(Registry::new()),
         }
     }
 
@@ -32,6 +38,18 @@ impl ActorSystem {
     //gracefully shutdown the actor system
     pub fn shutdown(&self) {
         self.shutdown.notify_waiters();
+    }
+
+    pub fn register<A: Actor>(&self, name: &str, addr: Addr<A>) {
+        self.registry.register(name, addr);
+    }
+
+    pub fn lookup<A: Actor>(&self, name: &str) -> Option<Addr<A>> {
+        self.registry.lookup(name)
+    }
+
+    pub fn unregister(&self, name: &str) {
+        self.registry.unregister(name);
     }
 }
 
