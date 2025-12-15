@@ -2,6 +2,10 @@
 name = "cinema"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "A lightweight actor model framework for Rust"
+keywords = ["actor", "async", "concurrent", "distributed"]
+categories = ["concurrency", "asynchronous"]
 
 [workspace]
 members = ["examples/chat"]
