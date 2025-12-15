@@ -12,6 +12,34 @@ A lightweight actor model framework for Rust, inspired by Erlang/OTP, Akka, and 
 - **Registry** - Name-based actor lookup with auto-cleanup
 - **Async handlers** - Non-blocking I/O in message handlers
 
+## Design Philosophy
+
+Cinema prioritizes:
+- **Explicit supervision** over silent recovery
+- **Typed messaging** over dynamic routing
+- **Sequential state ownership** over shared concurrency
+- **Minimal magic**, maximal control
+
+If you want HTTP-first or macro-heavy ergonomics, use [actix](https://actix.rs/).
+If you want OTP-style fault tolerance in Rust, use Cinema.
+
+> **Note on panics:** Cinema treats panics inside actors as failures, similar to Erlang process crashes. Panics are caught at actor boundaries and never crash the runtime.
+
+## Context API
+
+`Context<Self>` is the actor's handle to the runtime:
+
+| Method | Description |
+|--------|-------------|
+| `spawn_child(actor)` | Spawn supervised child |
+| `spawn_child_with_strategy(factory, strategy)` | Spawn with restart policy |
+| `stop()` | Stop this actor |
+| `address()` | Get own `Addr<Self>` |
+| `run_later(duration, msg)` | Delayed self-message |
+| `run_interval(duration, msg)` | Periodic self-message |
+| `add_stream(stream)` | Attach async stream |
+| `watch(addr)` | Get notified when actor dies |
+
 ## Architecture
 
 ```mermaid
@@ -218,6 +246,8 @@ if let Some(addr) = system.lookup::<MyActor>("my_actor") {
 }
 ```
 
+> **Failure semantics:** Registry entries are automatically removed when actors stop. During restarts, the same `Addr` remains valid - senders don't need to re-lookup.
+
 ## CRUD Example
 
 A simple in-memory user store - **no locks needed!**
@@ -353,6 +383,13 @@ Cinema is being built with distribution in mind. Upcoming features:
 - **Location Transparency** - `Addr<A>` works whether the actor is local or remote
 - **Cluster Membership** - Automatic node discovery and failure detection
 - **Distributed Registry** - Lookup actors across the cluster
+
+**Non-goals** (by design):
+- Global ordering guarantees
+- Exactly-once delivery
+- Transparent shared state
+
+Cinema follows Erlang's philosophy: let it crash, retry, and reconcile.
 
 ```mermaid
 graph TB
