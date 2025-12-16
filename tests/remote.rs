@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use cinema::{
     remote::{
-        deserialize_payload, proto::Envelope, register_message, Connection, RemoteClient,
-        RemoteMessage, TcpConnection, TcpTransport, Transport,
+        deserialize_payload, proto::Envelope, register_message, Connection, RemoteAddr,
+        RemoteClient, RemoteMessage, RemoteServer, TcpConnection, TcpTransport, Transport,
     },
     Message,
 };
@@ -157,4 +159,46 @@ async fn remote_client_send_recv() {
     println!("Client got response: {:?}", response.message_type);
 
     server.await.unwrap();
+}
+
+#[tokio::test]
+async fn remote_addr_to_server() {
+    let handler = Arc::new(|envelope: Envelope| {
+        println!("Server handling: {}", envelope.message_type);
+
+        Some(Envelope {
+            message_type: "test::Pong".to_string(),
+            payload: b"pong".to_vec(),
+            correlation_id: envelope.correlation_id,
+            sender_node: "server".to_string(),
+            target_actor: envelope.sender_node.clone(),
+            is_response: true,
+        })
+    });
+
+    let server = RemoteServer::bind("127.0.0.1:0", handler).await.unwrap();
+    let addr = server.local_addr().unwrap();
+
+    tokio::spawn(server.run());
+
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+    let transport = TcpTransport;
+    let conn = transport.connect(&addr.to_string()).await.unwrap();
+    let client = RemoteClient::new(conn);
+
+    let remote: RemoteAddr<()> = RemoteAddr::new("server-node", "echo-actor", client);
+
+    // Send via RemoteAddr
+    register_message::<Ping>();
+    let response = remote
+        .send(Ping {
+            message: "hello".to_string(),
+        })
+        .await
+        .unwrap();
+
+    assert!(response.is_response);
+    assert_eq!(response.correlation_id, 1); // First correlation ID
+    println!("Got response: {:?}", response.message_type);
 }
