@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use cinema::{
     remote::{
-        deserialize_payload, proto::Envelope, register_message, Connection, RemoteAddr,
-        RemoteClient, RemoteMessage, RemoteServer, TcpConnection, TcpTransport, Transport,
+        deserialize_payload, proto::Envelope, register_message, Connection, EnvelopeHandler,
+        RemoteAddr, RemoteClient, RemoteMessage, RemoteServer, TcpConnection, TcpTransport,
+        Transport,
     },
-    Message,
+    Actor, ActorSystem, Context, Handler, Message,
 };
 use prost::Message as ProstMessage;
 use tokio::net::{TcpListener, TcpStream};
@@ -163,16 +164,18 @@ async fn remote_client_send_recv() {
 
 #[tokio::test]
 async fn remote_addr_to_server() {
-    let handler = Arc::new(|envelope: Envelope| {
-        println!("Server handling: {}", envelope.message_type);
+    let handler: EnvelopeHandler = Arc::new(|envelope: Envelope| {
+        Box::pin(async move {
+            println!("Server handling: {}", envelope.message_type);
 
-        Some(Envelope {
-            message_type: "test::Pong".to_string(),
-            payload: b"pong".to_vec(),
-            correlation_id: envelope.correlation_id,
-            sender_node: "server".to_string(),
-            target_actor: envelope.sender_node.clone(),
-            is_response: true,
+            Some(Envelope {
+                message_type: "test::Pong".to_string(),
+                payload: b"pong".to_vec(),
+                correlation_id: envelope.correlation_id,
+                sender_node: "server".to_string(),
+                target_actor: envelope.sender_node.clone(),
+                is_response: true,
+            })
         })
     });
 
@@ -199,6 +202,86 @@ async fn remote_addr_to_server() {
         .unwrap();
 
     assert!(response.is_response);
-    assert_eq!(response.correlation_id, 1); // First correlation ID
+    assert!(response.correlation_id > 0); // correlation ID is global, just check it exists
     println!("Got response: {:?}", response.message_type);
+}
+
+#[tokio::test]
+async fn remote_addr_to_actor() {
+    // Define a simple Counter actor
+    struct Counter {
+        count: i32,
+    }
+    impl Actor for Counter {}
+
+    // Increment message (must be RemoteMessage)
+    #[derive(Clone, prost::Message)]
+    struct Increment {
+        #[prost(int32, tag = "1")]
+        amount: i32,
+    }
+    impl Message for Increment {
+        type Result = i32;
+    }
+    impl RemoteMessage for Increment {
+        fn type_id() -> &'static str {
+            "test::Increment"
+        }
+    }
+    impl Handler<Increment> for Counter {
+        fn handle(&mut self, msg: Increment, _ctx: &mut Context<Self>) -> i32 {
+            self.count += msg.amount;
+            self.count
+        }
+    }
+
+    // Start actor system
+    let system = ActorSystem::new();
+    let counter_addr = system.spawn(Counter { count: 0 });
+
+    // Create handler that dispatches to Counter actor
+    let handler: EnvelopeHandler = {
+        let addr = counter_addr.clone();
+        Arc::new(move |envelope| {
+            let addr = addr.clone();
+            Box::pin(async move {
+                // Decode the Increment message
+                let msg = Increment::decode(envelope.payload.as_slice()).ok()?;
+
+                // Send to actor
+                let result = addr.send(msg).await.ok()?;
+
+                // Build response (just put result in payload as bytes)
+                Some(Envelope {
+                    message_type: "i32".to_string(),
+                    payload: result.to_be_bytes().to_vec(),
+                    correlation_id: envelope.correlation_id,
+                    sender_node: "server".to_string(),
+                    target_actor: envelope.sender_node.clone(),
+                    is_response: true,
+                })
+            })
+        })
+    };
+
+    // Start server
+    let server = RemoteServer::bind("127.0.0.1:0", handler).await.unwrap();
+    let server_addr = server.local_addr().unwrap();
+    tokio::spawn(server.run());
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+    // Client connects
+    let transport = TcpTransport;
+    let conn = transport.connect(&server_addr.to_string()).await.unwrap();
+    let client = RemoteClient::new(conn);
+    let remote: RemoteAddr<Counter> = RemoteAddr::new("server", "counter", client);
+
+    // Send Increment via RemoteAddr
+    register_message::<Increment>();
+    let response = remote.send(Increment { amount: 5 }).await.unwrap();
+
+    assert!(response.is_response);
+    let result = i32::from_be_bytes(response.payload.try_into().unwrap());
+    assert_eq!(result, 5);
+    println!("Remote actor returned: {}", result);
 }
