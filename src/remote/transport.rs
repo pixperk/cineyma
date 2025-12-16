@@ -9,6 +9,7 @@ pub enum TransportError {
     Io(std::io::Error),
     Decode(prost::DecodeError),
     Disconnected,
+    Timeout,
 }
 
 impl From<std::io::Error> for TransportError {

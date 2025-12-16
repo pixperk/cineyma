@@ -1,6 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::{
+    sync::{mpsc, oneshot, Mutex},
+    time::timeout,
+};
 
 use crate::remote::{proto::Envelope, Connection, TcpConnection, TransportError};
 
@@ -101,5 +104,16 @@ impl RemoteClient {
             .map_err(|_| TransportError::Disconnected)?;
 
         rx.await.map_err(|_| TransportError::Disconnected)?
+    }
+
+    pub async fn send_timeout(
+        &self,
+        envelope: Envelope,
+        duration: Duration,
+    ) -> Result<Envelope, TransportError> {
+        match timeout(duration, self.send(envelope)).await {
+            Ok(result) => result,
+            Err(_) => Err(TransportError::Timeout),
+        }
     }
 }
