@@ -11,6 +11,7 @@ A lightweight actor model framework for Rust, inspired by Erlang/OTP, Akka, and 
 - **Timers** - `run_later` and `run_interval` scheduling
 - **Registry** - Name-based actor lookup with auto-cleanup
 - **Async handlers** - Non-blocking I/O in message handlers
+- **Remote actors** - TCP transport with Protocol Buffers serialization
 
 ## Design Philosophy
 
@@ -345,6 +346,188 @@ Connect with netcat:
 nc localhost 8080
 ```
 
+## Remote Actors
+
+Cinema supports sending messages to actors on other nodes over TCP with Protocol Buffers serialization.
+
+### How It Works
+
+```mermaid
+sequenceDiagram
+    participant C as Client Node
+    participant N as Network (TCP)
+    participant S as Server Node
+    participant A as Actor
+
+    C->>C: Encode message (protobuf)
+    C->>N: Send Envelope
+    N->>S: Receive Envelope
+    S->>S: Decode message
+    S->>A: addr.send(msg).await
+    A->>S: Return result
+    S->>S: Encode result (protobuf)
+    S->>N: Send Response Envelope
+    N->>C: Receive Response
+    C->>C: Decode result
+```
+
+### Define Remote Messages
+
+Messages must implement `RemoteMessage` (protobuf serializable):
+
+```rust
+use cinema::{Message, remote::RemoteMessage};
+use prost::Message as ProstMessage;
+
+// Request message
+#[derive(Clone, ProstMessage)]
+struct Add {
+    #[prost(int32, tag = "1")]
+    n: i32,
+}
+
+impl Message for Add {
+    type Result = AddResult;  // Result must also be RemoteMessage
+}
+
+impl RemoteMessage for Add {
+    fn type_id() -> &'static str { "myapp::Add" }
+}
+
+// Response message (protobuf wrapper)
+#[derive(Clone, ProstMessage)]
+struct AddResult {
+    #[prost(int32, tag = "1")]
+    value: i32,
+}
+
+impl Message for AddResult {
+    type Result = ();
+}
+
+impl RemoteMessage for AddResult {
+    fn type_id() -> &'static str { "myapp::AddResult" }
+}
+```
+
+### Server Side
+
+```rust
+use cinema::{Actor, Handler, ActorSystem, Context};
+use cinema::remote::{LocalNode, RemoteServer, TcpTransport};
+
+struct Calculator { value: i32 }
+
+impl Actor for Calculator {}
+
+impl Handler<Add> for Calculator {
+    fn handle(&mut self, msg: Add, _ctx: &mut Context<Self>) -> AddResult {
+        self.value += msg.n;
+        AddResult { value: self.value }
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let system = ActorSystem::new();
+    let calc = system.spawn(Calculator { value: 0 });
+
+    // Configure node identity
+    let node = LocalNode::new("calc-server");
+
+    // Create handler (1 line vs 20 lines of boilerplate)
+    let handler = node.handler::<Calculator, Add>(calc);
+
+    // Start server
+    let server = RemoteServer::bind("0.0.0.0:8080", handler).await.unwrap();
+    server.run().await;
+}
+```
+
+### Client Side
+
+```rust
+use cinema::remote::{LocalNode, RemoteClient, TcpTransport, Transport};
+
+#[tokio::main]
+async fn main() {
+    // Connect to server
+    let transport = TcpTransport;
+    let conn = transport.connect("127.0.0.1:8080").await.unwrap();
+    let client = RemoteClient::new(conn);
+
+    // Create remote address
+    let node = LocalNode::new("client");
+    let remote = node.remote_addr::<Calculator>("calc-server", "calculator", client);
+
+    // Send message (same API as local!)
+    let response = remote.send(Add { n: 5 }).await.unwrap();
+
+    // Decode response
+    let result = AddResult::decode(response.payload.as_slice()).unwrap();
+    println!("Result: {}", result.value);
+}
+```
+
+### Multiple Message Types
+
+Use `MessageRouter` to handle different message types:
+
+```rust
+use cinema::remote::MessageRouter;
+
+let handler = MessageRouter::new()
+    .route::<Add>(node.handler::<Calculator, Add>(calc.clone()))
+    .route::<Subtract>(node.handler::<Calculator, Subtract>(calc.clone()))
+    .route::<GetValue>(node.handler::<Calculator, GetValue>(calc))
+    .build();
+
+let server = RemoteServer::bind("0.0.0.0:8080", handler).await.unwrap();
+```
+
+### Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Node"
+        LN1[LocalNode]
+        RA[RemoteAddr]
+        RC[RemoteClient]
+        LN1 -->|creates| RA
+        RA -->|uses| RC
+    end
+
+    subgraph "Network"
+        TCP[TCP Connection]
+        ENV[Envelope<br/>protobuf bytes]
+    end
+
+    subgraph "Server Node"
+        LN2[LocalNode]
+        RS[RemoteServer]
+        MR[MessageRouter]
+        H[Handler]
+        ADDR[Addr]
+        ACT[Actor]
+
+        LN2 -->|creates| H
+        RS -->|dispatches to| MR
+        MR -->|routes to| H
+        H -->|calls| ADDR
+        ADDR -->|sends to| ACT
+    end
+
+    RC -->|sends| TCP
+    TCP -->|delivers| RS
+    ACT -->|returns| H
+    H -->|responds via| TCP
+    TCP -->|receives| RC
+
+    style LN1 fill:#4a9eff
+    style LN2 fill:#4a9eff
+    style ACT fill:#22c55e
+```
+
 ## Roadmap
 
 ```mermaid
@@ -354,12 +537,12 @@ graph LR
         B[Supervision]
         C[Streams]
         D[Registry]
-    end
-
-    subgraph "Coming Soon"
         E[Serialization]
         F[Transport Layer]
         G[Remote Actors]
+    end
+
+    subgraph "Coming Soon"
         H[Cluster Discovery]
     end
 
@@ -369,19 +552,16 @@ graph LR
     style B fill:#22c55e
     style C fill:#22c55e
     style D fill:#22c55e
-    style E fill:#fbbf24
-    style F fill:#94a3b8
-    style G fill:#94a3b8
-    style H fill:#94a3b8
+    style E fill:#22c55e
+    style F fill:#22c55e
+    style G fill:#22c55e
+    style H fill:#fbbf24
 ```
 
-### Distributed Actors (Coming Soon)
+### Cluster Discovery (Coming Soon)
 
-Cinema is being built with distribution in mind. Upcoming features:
-
-- **Remote Actors** - Send messages to actors on other nodes with the same API
-- **Location Transparency** - `Addr<A>` works whether the actor is local or remote
-- **Cluster Membership** - Automatic node discovery and failure detection
+- **Gossip Protocol** - Automatic node discovery
+- **Failure Detection** - Heartbeat-based node health monitoring
 - **Distributed Registry** - Lookup actors across the cluster
 
 **Non-goals** (by design):
