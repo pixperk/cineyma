@@ -5,7 +5,45 @@ use prost::Message as ProstMessage;
 
 use crate::{remote::proto::Envelope, Actor, Addr, Handler};
 
-use super::{EnvelopeHandler, RemoteMessage};
+use super::{EnvelopeHandler, NodeId, RemoteAddr, RemoteClient, RemoteMessage};
+
+/// Represents this node's identity - used for creating handlers and remote addresses
+#[derive(Clone)]
+pub struct LocalNode {
+    pub id: NodeId,
+}
+
+impl LocalNode {
+    pub fn new(id: &str) -> Self {
+        Self {
+            id: NodeId(id.to_string()),
+        }
+    }
+
+    /// Create request-response handler for actor/message pair
+    pub fn handler<A, M>(&self, addr: Addr<A>) -> EnvelopeHandler
+    where
+        A: Actor + Handler<M>,
+        M: RemoteMessage,
+        M::Result: RemoteMessage,
+    {
+        make_handler(addr, &self.id.0)
+    }
+
+    /// Create fire-and-forget handler
+    pub fn tell_handler<A, M>(&self, addr: Addr<A>) -> EnvelopeHandler
+    where
+        A: Actor + Handler<M>,
+        M: RemoteMessage,
+    {
+        make_tell_handler(addr)
+    }
+
+    /// Create a remote address to an actor on another node
+    pub fn remote_addr<A>(&self, remote_node: &str, actor_name: &str, client: RemoteClient) -> RemoteAddr<A> {
+        RemoteAddr::new(&self.id.0, remote_node, actor_name, client)
+    }
+}
 
 /// Create request-response handler for actor/message pair
 /// Both the message M and its result M::Result must be RemoteMessage (protobuf)

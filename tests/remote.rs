@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use cinema::{
     remote::{
-        deserialize_payload, make_handler, proto::Envelope, register_message, Connection,
-        EnvelopeHandler, RemoteAddr, RemoteClient, RemoteMessage, RemoteServer, TcpConnection,
+        deserialize_payload, proto::Envelope, register_message, Connection, EnvelopeHandler,
+        LocalNode, RemoteAddr, RemoteClient, RemoteMessage, RemoteServer, TcpConnection,
         TcpTransport, Transport,
     },
     Actor, ActorSystem, Context, Handler, Message,
@@ -190,7 +190,7 @@ async fn remote_addr_to_server() {
     let conn = transport.connect(&addr.to_string()).await.unwrap();
     let client = RemoteClient::new(conn);
 
-    let remote: RemoteAddr<()> = RemoteAddr::new("server-node", "echo-actor", client);
+    let remote: RemoteAddr<()> = RemoteAddr::new("client", "server-node", "echo-actor", client);
 
     // Send via RemoteAddr
     register_message::<Ping>();
@@ -274,7 +274,7 @@ async fn remote_addr_to_actor() {
     let transport = TcpTransport;
     let conn = transport.connect(&server_addr.to_string()).await.unwrap();
     let client = RemoteClient::new(conn);
-    let remote: RemoteAddr<Counter> = RemoteAddr::new("server", "counter", client);
+    let remote: RemoteAddr<Counter> = RemoteAddr::new("client", "server", "counter", client);
 
     // Send Increment via RemoteAddr
     register_message::<Increment>();
@@ -336,8 +336,9 @@ async fn make_handler_simplifies_setup() {
     let system = ActorSystem::new();
     let calc_addr = system.spawn(Calculator { value: 10 });
 
-    // ONE LINE to create handler (vs 20 lines of boilerplate before)
-    let handler = make_handler::<Calculator, Add>(calc_addr.clone(), "calc-node");
+    // Configure node identity once, use for all handlers
+    let node = LocalNode::new("calc-node");
+    let handler = node.handler::<Calculator, Add>(calc_addr.clone());
 
     // Start server
     let server = RemoteServer::bind("127.0.0.1:0", handler).await.unwrap();
@@ -349,7 +350,9 @@ async fn make_handler_simplifies_setup() {
     let transport = TcpTransport;
     let conn = transport.connect(&server_addr.to_string()).await.unwrap();
     let client = RemoteClient::new(conn);
-    let remote: RemoteAddr<Calculator> = RemoteAddr::new("calc-node", "calculator", client);
+    // Use LocalNode to create remote address (provides our identity automatically)
+    let client_node = LocalNode::new("client");
+    let remote: RemoteAddr<Calculator> = client_node.remote_addr("calc-node", "calculator", client);
 
     let response = remote.send(Add { n: 5 }).await.unwrap();
 

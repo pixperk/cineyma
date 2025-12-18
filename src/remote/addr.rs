@@ -26,17 +26,19 @@ pub struct RemoteActorId {
 ///remote address - points to an actor on another node
 pub struct RemoteAddr<A> {
     pub id: RemoteActorId,
+    local_node: NodeId,
     client: RemoteClient,
     _phantom: PhantomData<A>,
 }
 
 impl<A> RemoteAddr<A> {
-    pub fn new(node_id: &str, actor_name: &str, client: RemoteClient) -> Self {
+    pub fn new(local_node_id: &str, remote_node_id: &str, actor_name: &str, client: RemoteClient) -> Self {
         Self {
             id: RemoteActorId {
-                node: NodeId(node_id.to_string()),
+                node: NodeId(remote_node_id.to_string()),
                 actor_name: actor_name.to_string(),
             },
+            local_node: NodeId(local_node_id.to_string()),
             client,
             _phantom: PhantomData,
         }
@@ -50,7 +52,7 @@ impl<A> RemoteAddr<A> {
         let envelope = Envelope::from_message(
             &msg,
             next_correlation_id(),
-            "local", //todo : proper node identity
+            &self.local_node.0,
             &self.id.actor_name,
         );
 
@@ -62,7 +64,7 @@ impl<A> RemoteAddr<A> {
         M: RemoteMessage,
     {
         let envelope =
-            Envelope::from_message(&msg, next_correlation_id(), "local", &self.id.actor_name);
+            Envelope::from_message(&msg, next_correlation_id(), &self.local_node.0, &self.id.actor_name);
         self.client.send(envelope).await
     }
 }
