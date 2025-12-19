@@ -373,7 +373,7 @@ sequenceDiagram
 
 ### Define Remote Messages
 
-Messages must implement `RemoteMessage` (protobuf serializable):
+Messages must implement `RemoteMessage` (protobuf serializable). The `type_id` is auto-derived from Rust's type name:
 
 ```rust
 use cinema::{Message, remote::RemoteMessage};
@@ -385,29 +385,21 @@ struct Add {
     #[prost(int32, tag = "1")]
     n: i32,
 }
-
 impl Message for Add {
     type Result = AddResult;  // Result must also be RemoteMessage
 }
+impl RemoteMessage for Add {}  // type_id auto-derived!
 
-impl RemoteMessage for Add {
-    fn type_id() -> &'static str { "myapp::Add" }
-}
-
-// Response message (protobuf wrapper)
+// Response message
 #[derive(Clone, ProstMessage)]
 struct AddResult {
     #[prost(int32, tag = "1")]
     value: i32,
 }
-
 impl Message for AddResult {
     type Result = ();
 }
-
-impl RemoteMessage for AddResult {
-    fn type_id() -> &'static str { "myapp::AddResult" }
-}
+impl RemoteMessage for AddResult {}  // type_id auto-derived!
 ```
 
 ### Server Side

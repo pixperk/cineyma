@@ -21,11 +21,7 @@ impl Message for Ping {
     type Result = ();
 }
 
-impl RemoteMessage for Ping {
-    fn type_id() -> &'static str {
-        "test::Ping"
-    }
-}
+impl RemoteMessage for Ping {}
 
 #[test]
 fn envelope_roundtrip() {
@@ -35,13 +31,13 @@ fn envelope_roundtrip() {
 
     let envelope = Envelope::from_message(&ping, 42, "node", "actor");
 
-    assert_eq!(envelope.message_type, "test::Ping");
+    assert!(envelope.message_type.contains("Ping")); // auto-derived type name
     assert_eq!(envelope.correlation_id, 42);
 
     let serialized = envelope.to_bytes();
 
     let decoded = Envelope::from_bytes(&serialized).unwrap();
-    assert_eq!(decoded.message_type, "test::Ping");
+    assert!(decoded.message_type.contains("Ping"));
     assert_eq!(decoded.correlation_id, 42);
 }
 
@@ -72,7 +68,7 @@ async fn tcp_send_recv_envelope() {
 
         //receive envelope
         let envelope = conn.recv().await.unwrap();
-        assert_eq!(envelope.message_type, "test::Ping");
+        assert!(envelope.message_type.contains("Ping"));
         println!(
             "Server received: {}",
             String::from_utf8_lossy(&envelope.payload)
@@ -94,7 +90,7 @@ async fn tcp_send_recv_envelope() {
     client.close().await.unwrap();
 
     let received_envelope = server.await.unwrap();
-    assert_eq!(received_envelope.message_type, "test::Ping");
+    assert!(received_envelope.message_type.contains("Ping"));
     assert_eq!(received_envelope.correlation_id, 123);
     assert_eq!(received_envelope.sender_node, "node-a");
     assert_eq!(received_envelope.target_actor, "actor-1");
@@ -223,11 +219,7 @@ async fn remote_addr_to_actor() {
     impl Message for Increment {
         type Result = i32;
     }
-    impl RemoteMessage for Increment {
-        fn type_id() -> &'static str {
-            "test::Increment"
-        }
-    }
+    impl RemoteMessage for Increment {}
     impl Handler<Increment> for Counter {
         fn handle(&mut self, msg: Increment, _ctx: &mut Context<Self>) -> i32 {
             self.count += msg.amount;
@@ -304,11 +296,7 @@ async fn make_handler_simplifies_setup() {
     impl Message for Add {
         type Result = AddResult; // Result must also be RemoteMessage
     }
-    impl RemoteMessage for Add {
-        fn type_id() -> &'static str {
-            "test::Add"
-        }
-    }
+    impl RemoteMessage for Add {}
 
     // Response type (protobuf wrapper for the result)
     #[derive(Clone, prost::Message)]
@@ -319,11 +307,7 @@ async fn make_handler_simplifies_setup() {
     impl Message for AddResult {
         type Result = ();
     }
-    impl RemoteMessage for AddResult {
-        fn type_id() -> &'static str {
-            "test::AddResult"
-        }
-    }
+    impl RemoteMessage for AddResult {}
 
     impl Handler<Add> for Calculator {
         fn handle(&mut self, msg: Add, _ctx: &mut Context<Self>) -> AddResult {
@@ -379,11 +363,7 @@ async fn auto_derived_client_identity() {
     impl Message for Add {
         type Result = AddResult;
     }
-    impl RemoteMessage for Add {
-        fn type_id() -> &'static str {
-            "test::Add"
-        }
-    }
+    impl RemoteMessage for Add {}
 
     #[derive(Clone, prost::Message)]
     struct AddResult {
@@ -393,11 +373,7 @@ async fn auto_derived_client_identity() {
     impl Message for AddResult {
         type Result = ();
     }
-    impl RemoteMessage for AddResult {
-        fn type_id() -> &'static str {
-            "test::AddResult"
-        }
-    }
+    impl RemoteMessage for AddResult {}
 
     impl Handler<Add> for Calculator {
         fn handle(&mut self, msg: Add, _ctx: &mut Context<Self>) -> AddResult {
@@ -433,4 +409,93 @@ async fn auto_derived_client_identity() {
     let result = AddResult::decode(response.payload.as_slice()).unwrap();
     assert_eq!(result.value, 107); // 100 + 7
     println!("Auto-identity client got: {}", result.value);
+}
+
+/// Test: Two servers with SAME node name - what happens?
+#[tokio::test]
+async fn two_servers_same_name() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static CALC_CALLS: AtomicUsize = AtomicUsize::new(0);
+    static HELLO_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    // Calculator Actor
+    struct Calculator { value: i32 }
+    impl Actor for Calculator {}
+
+    #[derive(Clone, prost::Message)]
+    struct Add { #[prost(int32, tag = "1")] n: i32 }
+    impl Message for Add { type Result = AddResult; }
+    impl RemoteMessage for Add {}
+
+    #[derive(Clone, prost::Message)]
+    struct AddResult { #[prost(int32, tag = "1")] value: i32 }
+    impl Message for AddResult { type Result = (); }
+    impl RemoteMessage for AddResult {}
+
+    impl Handler<Add> for Calculator {
+        fn handle(&mut self, msg: Add, _ctx: &mut Context<Self>) -> AddResult {
+            CALC_CALLS.fetch_add(1, Ordering::SeqCst);
+            println!("Calculator handling Add!");
+            self.value += msg.n;
+            AddResult { value: self.value }
+        }
+    }
+
+    // HelloPrinter Actor
+    struct HelloPrinter;
+    impl Actor for HelloPrinter {}
+
+    impl Handler<Add> for HelloPrinter {
+        fn handle(&mut self, _msg: Add, _ctx: &mut Context<Self>) -> AddResult {
+            HELLO_CALLS.fetch_add(1, Ordering::SeqCst);
+            println!("Hello from calc! (not calculating)");
+            AddResult { value: 999 }
+        }
+    }
+
+    let system = ActorSystem::new();
+
+    // Server 1: Calculator - named "calc-server"
+    let calc_addr = system.spawn(Calculator { value: 100 });
+    let node1 = LocalNode::new("calc-server");
+    let server1 = RemoteServer::bind("127.0.0.1:0", node1.handler::<Calculator, Add>(calc_addr)).await.unwrap();
+    let server1_addr = server1.local_addr().unwrap();
+    tokio::spawn(server1.run());
+
+    // Server 2: HelloPrinter - ALSO named "calc-server"!
+    let hello_addr = system.spawn(HelloPrinter);
+    let node2 = LocalNode::new("calc-server");
+    let server2 = RemoteServer::bind("127.0.0.1:0", node2.handler::<HelloPrinter, Add>(hello_addr)).await.unwrap();
+    let server2_addr = server2.local_addr().unwrap();
+    tokio::spawn(server2.run());
+
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    println!("Server 1 (Calculator) at: {}", server1_addr);
+    println!("Server 2 (HelloPrinter) at: {}", server2_addr);
+
+    let transport = TcpTransport;
+
+    // Client 1 connects to Calculator
+    let conn1 = transport.connect(&server1_addr.to_string()).await.unwrap();
+    let client1 = RemoteClient::new(conn1);
+    let remote1: RemoteAddr<Calculator> = client1.remote_addr("calc-server", "calculator");
+
+    // Client 2 connects to HelloPrinter
+    let conn2 = transport.connect(&server2_addr.to_string()).await.unwrap();
+    let client2 = RemoteClient::new(conn2);
+    let remote2: RemoteAddr<HelloPrinter> = client2.remote_addr("calc-server", "calculator");
+
+    let result1 = AddResult::decode(remote1.send(Add { n: 5 }).await.unwrap().payload.as_slice()).unwrap();
+    let result2 = AddResult::decode(remote2.send(Add { n: 5 }).await.unwrap().payload.as_slice()).unwrap();
+
+    println!("Response from server1: {}", result1.value);
+    println!("Response from server2: {}", result2.value);
+
+    assert_eq!(result1.value, 105); // Calculator: 100 + 5
+    assert_eq!(result2.value, 999); // HelloPrinter: dummy
+
+    println!("\n=== CONCLUSION ===");
+    println!("Node name doesn't matter for routing!");
+    println!("TCP connection determines which server handles the message.");
 }

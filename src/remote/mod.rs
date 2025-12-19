@@ -23,10 +23,13 @@ pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/cinema.rs"));
 }
 
-///trait for remote messages (can be sent over the network)
-/// to be remotable, a message must implement this trait
+/// Trait for remote messages (can be sent over the network).
+/// To be remotable, a message must implement this trait.
+/// The type_id is auto-derived from Rust's type name.
 pub trait RemoteMessage: Message + ProstMessage + Default + Clone {
-    fn type_id() -> &'static str;
+    fn type_id() -> &'static str {
+        std::any::type_name::<Self>()
+    }
 }
 
 impl Envelope {
