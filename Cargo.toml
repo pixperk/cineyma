@@ -47,3 +47,8 @@ path = "tests/streams.rs"
 [[test]]
 name = "remote"
 path = "tests/remote.rs"
+
+
+[[test]]
+name = "cluster"
+path = "tests/cluster.rs"

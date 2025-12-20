@@ -53,6 +53,34 @@ impl ClusterNode {
         let members = self.members.read().await;
         members.values().cloned().collect()
     }
+
+    ///create a gossip message with current cluster members
+    pub async fn create_gossip_message(&self) -> GossipMessage {
+        let members = self.members.read().await;
+        let node_infos = members.values().map(|n| NodeInfo::from(n)).collect();
+
+        GossipMessage {
+            members: node_infos,
+        }
+    }
+
+    pub async fn merge_gossip(&self, gossip: GossipMessage) {
+        let mut members = self.members.write().await;
+
+        for node_info in gossip.members {
+            let node: Node = node_info.into();
+
+            //update if dont know this node or status changed
+            members
+                .entry(node.id.clone())
+                .and_modify(|existing_node| {
+                    if existing_node.status != node.status {
+                        *existing_node = node.clone();
+                    }
+                })
+                .or_insert(node);
+        }
+    }
 }
 
 impl From<&Node> for NodeInfo {
