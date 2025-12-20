@@ -7,7 +7,7 @@ use std::{collections::HashMap, sync::Arc};
 use bytes::BytesMut;
 use prost::Message;
 use rand::seq::IteratorRandom;
-use tokio::{net::TcpListener, sync::RwLock, time::Duration};
+use tokio::{net::TcpListener, sync::RwLock, time::{Duration, Instant}};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Node {
@@ -16,7 +16,7 @@ pub struct Node {
     pub status: NodeStatus,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum NodeStatus {
     Up,
     Suspect,
@@ -29,6 +29,8 @@ pub struct ClusterNode {
     pub local_node: Node,
     ///cluster members(node id -> Node)
     members: Arc<RwLock<HashMap<String, Node>>>,
+    ///last heartbeat time for each node
+    last_heartbeat: Arc<RwLock<HashMap<String, Instant>>>,
 }
 
 impl ClusterNode {
@@ -40,18 +42,26 @@ impl ClusterNode {
         };
 
         let mut members = HashMap::new();
-        members.insert(id, local_node.clone());
+        members.insert(id.clone(), local_node.clone());
+
+        let mut heartbeats = HashMap::new();
+        heartbeats.insert(id, Instant::now());
 
         Self {
             local_node,
             members: Arc::new(RwLock::new(members)),
+            last_heartbeat: Arc::new(RwLock::new(heartbeats)),
         }
     }
 
     ///add or update a member in the cluster
     pub async fn add_member(&self, node: Node) {
         let mut members = self.members.write().await;
-        members.insert(node.id.clone(), node);
+        members.insert(node.id.clone(), node.clone());
+
+        // Record heartbeat time
+        let mut heartbeats = self.last_heartbeat.write().await;
+        heartbeats.insert(node.id, Instant::now());
     }
 
     ///get all members in the cluster
@@ -72,6 +82,7 @@ impl ClusterNode {
 
     pub async fn merge_gossip(&self, gossip: GossipMessage) {
         let mut members = self.members.write().await;
+        let mut heartbeats = self.last_heartbeat.write().await;
 
         for node_info in gossip.members {
             let node: Node = node_info.into();
@@ -84,7 +95,10 @@ impl ClusterNode {
                         *existing_node = node.clone();
                     }
                 })
-                .or_insert(node);
+                .or_insert(node.clone());
+
+            // Update heartbeat time
+            heartbeats.insert(node.id, Instant::now());
         }
     }
 
@@ -179,16 +193,42 @@ impl ClusterNode {
         Ok(())
     }
 
-    /// Start periodic gossip to random peers
+    /// Start periodic gossip to random peers with integrated failure detection
     pub fn start_periodic_gossip(
         self: Arc<Self>,
         interval: Duration,
+        suspect_timeout: Duration,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(interval);
 
             loop {
                 ticker.tick().await;
+
+                // Check for failed nodes (failure detection)
+                let now = Instant::now();
+                {
+                    let mut members = self.members.write().await;
+                    let heartbeats = self.last_heartbeat.read().await;
+
+                    for (node_id, node) in members.iter_mut() {
+                        if node_id == &self.local_node.id {
+                            continue; // Skip self
+                        }
+
+                        if let Some(last_seen) = heartbeats.get(node_id) {
+                            let elapsed = now.duration_since(*last_seen);
+
+                            if elapsed > suspect_timeout * 2 && node.status != NodeStatus::Down {
+                                println!("[{}] Marking {} as DOWN", self.local_node.id, node_id);
+                                node.status = NodeStatus::Down;
+                            } else if elapsed > suspect_timeout && node.status == NodeStatus::Up {
+                                println!("[{}] Marking {} as SUSPECT", self.local_node.id, node_id);
+                                node.status = NodeStatus::Suspect;
+                            }
+                        }
+                    }
+                }
 
                 // Pick random peer (excluding self)
                 let peer = {

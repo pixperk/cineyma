@@ -139,10 +139,16 @@ async fn periodic_gossip_spreads_membership() {
         })
         .await;
 
-    // Start periodic gossip (every 100ms)
-    let _handle1 = node1.clone().start_periodic_gossip(Duration::from_millis(100));
-    let _handle2 = node2.clone().start_periodic_gossip(Duration::from_millis(100));
-    let _handle3 = node3.clone().start_periodic_gossip(Duration::from_millis(100));
+    // Start periodic gossip (every 100ms, suspect after 10s - not testing failure here)
+    let _handle1 = node1
+        .clone()
+        .start_periodic_gossip(Duration::from_millis(100), Duration::from_secs(10));
+    let _handle2 = node2
+        .clone()
+        .start_periodic_gossip(Duration::from_millis(100), Duration::from_secs(10));
+    let _handle3 = node3
+        .clone()
+        .start_periodic_gossip(Duration::from_millis(100), Duration::from_secs(10));
 
     // Wait for gossip to spread (should take 2-3 rounds)
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -168,4 +174,55 @@ async fn periodic_gossip_spreads_membership() {
     assert_eq!(members1.len(), 3, "Node 1 should know 3 nodes");
     assert_eq!(members2.len(), 3, "Node 2 should know 3 nodes");
     assert_eq!(members3.len(), 3, "Node 3 should know 3 nodes");
+}
+
+#[tokio::test]
+async fn failure_detector_marks_dead_nodes() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    // Create node1 (node2 is just for the test, doesn't need to run)
+    let node1 = Arc::new(ClusterNode::new(
+        "node-1".to_string(),
+        "127.0.0.1:9301".to_string(),
+    ));
+
+    // Node1 knows about Node2
+    node1
+        .add_member(Node {
+            id: "node-2".to_string(),
+            addr: "127.0.0.1:9302".to_string(),
+            status: NodeStatus::Up,
+        })
+        .await;
+
+    // Start periodic gossip with failure detection (check every 100ms, suspect after 200ms)
+    let _handle = node1.clone().start_periodic_gossip(
+        Duration::from_millis(100),
+        Duration::from_millis(200),
+    );
+
+    // Wait for suspect timeout
+    tokio::time::sleep(Duration::from_millis(250)).await;
+
+    // Node2 should be marked as SUSPECT
+    let members = node1.get_members().await;
+    let node2_status = members
+        .iter()
+        .find(|n| n.id == "node-2")
+        .map(|n| &n.status);
+    assert_eq!(node2_status, Some(&NodeStatus::Suspect));
+    println!("Node 2 marked as SUSPECT");
+
+    // Wait for down timeout (2x suspect = 400ms total)
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Node2 should be marked as DOWN
+    let members = node1.get_members().await;
+    let node2_status = members
+        .iter()
+        .find(|n| n.id == "node-2")
+        .map(|n| &n.status);
+    assert_eq!(node2_status, Some(&NodeStatus::Down));
+    println!("Node 2 marked as DOWN");
 }
