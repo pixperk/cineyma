@@ -537,6 +537,44 @@ Connect with netcat:
 nc localhost 8080
 ```
 
+See [examples/chat/README.md](examples/chat/README.md) for details.
+
+### Distributed Key-Value Store
+
+demonstrates cluster capabilities: gossip membership, actor discovery, location-transparent messaging, and failure detection.
+
+```bash
+# start first node
+cargo run -p distributed-kv -- node-1
+
+# start second node (joins via first)
+cargo run -p distributed-kv -- node-2 127.0.0.1:7001
+
+# start third node
+cargo run -p distributed-kv -- node-3 127.0.0.1:7001
+```
+
+interactive cli commands:
+```
+> set user:1 alice
+OK
+
+> get user:1
+alice
+
+> members
+cluster members:
+  node-1 @ 127.0.0.1:7001 [Up]
+  node-2 @ 127.0.0.1:7002 [Up]
+  node-3 @ 127.0.0.1:7003 [Up]
+
+> actors
+registered actors:
+  kv-store -> node-1 (KVStore)
+```
+
+See [examples/distributed-kv/README.md](examples/distributed-kv/README.md) for details.
+
 ---
 
 ## Architecture
