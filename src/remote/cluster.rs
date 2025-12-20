@@ -154,7 +154,7 @@ impl ClusterNode {
         let listener = TcpListener::bind(&addr).await?;
 
         loop {
-            let (stream, peer) = listener.accept().await?;
+            let (stream, _peer) = listener.accept().await?;
             let cluster = self.clone();
             let handler = actor_handler.clone();
 

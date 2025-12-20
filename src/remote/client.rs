@@ -15,6 +15,7 @@ enum ClientCommand {
         envelope: Envelope,
         response_tx: Option<PendingRequest>,
     },
+    #[allow(dead_code)]
     Close,
 }
 

@@ -41,23 +41,24 @@ async fn main() {
         addr.clone(),
     ));
 
-    //create actor system and spawn kv store
+    //create actor system and spawn kv store (only on node-1)
     let system = ActorSystem::new();
-    let store = system.spawn(KVStore::new());
+    let handler = if node_id == "node-1" {
+        let store = system.spawn(KVStore::new());
+        cluster.register_actor("kv-store".to_string(), "KVStore".to_string()).await;
 
-    //register actor in cluster
-    cluster.register_actor("kv-store".to_string(), "KVStore".to_string()).await;
-
-    //create message router for remote requests
-    let local_node = LocalNode::new(node_id);
-    let handler = MessageRouter::new()
-        .route::<GetRequest>(local_node.handler::<KVStore, GetRequest>(store.clone()))
-        .route::<SetRequest>(local_node.handler::<KVStore, SetRequest>(store.clone()))
-        .route::<DeleteRequest>(local_node.handler::<KVStore, DeleteRequest>(store.clone()))
-        .build();
+        let local_node = LocalNode::new(node_id);
+        Some(MessageRouter::new()
+            .route::<GetRequest>(local_node.handler::<KVStore, GetRequest>(store.clone()))
+            .route::<SetRequest>(local_node.handler::<KVStore, SetRequest>(store.clone()))
+            .route::<DeleteRequest>(local_node.handler::<KVStore, DeleteRequest>(store.clone()))
+            .build())
+    } else {
+        None
+    };
 
     //start cluster server
-    tokio::spawn(cluster.clone().start_server(port, Some(handler)));
+    tokio::spawn(cluster.clone().start_server(port, handler));
 
     //join existing cluster if seed provided
     if let Some(seed) = seed_addr {
