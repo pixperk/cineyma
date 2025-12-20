@@ -38,3 +38,60 @@ async fn gossip_merges_membership() {
         members_a.iter().map(|n| &n.id).collect::<Vec<_>>()
     );
 }
+
+#[tokio::test]
+async fn seven_nodes_gossip_converge() {
+    use std::sync::Arc;
+
+    // Create 7 nodes
+    let nodes: Vec<Arc<ClusterNode>> = (1..=7)
+        .map(|i| {
+            Arc::new(ClusterNode::new(
+                format!("node-{}", i),
+                format!("127.0.0.1:{}", 9100 + i),
+            ))
+        })
+        .collect();
+
+    // Start servers
+    for (i, node) in nodes.iter().enumerate() {
+        let port = 9101 + i as u16;
+        tokio::spawn(node.clone().start_gossip_server(port));
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Chain: 1->2->3->4->5->6->7
+    for i in 0..6 {
+        let peer = Node {
+            id: format!("node-{}", i + 2),
+            addr: format!("127.0.0.1:{}", 9102 + i),
+            status: NodeStatus::Up,
+        };
+        nodes[i].send_gossip_to(&peer).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    // Reverse gossip to spread info back
+    for i in (1..7).rev() {
+        let peer = Node {
+            id: format!("node-{}", i),
+            addr: format!("127.0.0.1:{}", 9100 + i),
+            status: NodeStatus::Up,
+        };
+        nodes[i].send_gossip_to(&peer).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // All nodes should know all 7
+    for (i, node) in nodes.iter().enumerate() {
+        let members = node.get_members().await;
+        println!(
+            "Node {} knows: {:?}",
+            i + 1,
+            members.iter().map(|n| &n.id).collect::<Vec<_>>()
+        );
+        assert_eq!(members.len(), 7, "Node {} should know 7 nodes", i + 1);
+    }
+}

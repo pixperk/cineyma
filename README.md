@@ -12,6 +12,7 @@ A lightweight actor model framework for Rust, inspired by Erlang/OTP, Akka, and 
 - **Registry** - Name-based actor lookup with auto-cleanup
 - **Async handlers** - Non-blocking I/O in message handlers
 - **Remote actors** - TCP transport with Protocol Buffers serialization
+- **Cluster gossip** - Gossip protocol for membership sharing across nodes
 
 ## Design Philosophy
 
@@ -549,11 +550,70 @@ graph LR
     style H fill:#fbbf24
 ```
 
-### Cluster Discovery (Coming Soon)
+## Cluster Gossip
 
-- **Gossip Protocol** - Automatic node discovery
-- **Failure Detection** - Heartbeat-based node health monitoring
-- **Distributed Registry** - Lookup actors across the cluster
+Cinema uses a gossip protocol for cluster membership. Nodes exchange their view of the cluster to achieve eventual consistency.
+
+### How It Works
+
+Each node maintains:
+- **Local node** - Its own identity (id + address + status)
+- **Member list** - Known cluster members in `Arc<RwLock<HashMap>>`
+
+Gossip happens bidirectionally:
+1. **Gossip server** - Listens on a port, receives membership from peers, replies with own membership
+2. **Gossip client** - Connects to peer, sends membership, receives response
+
+Both sides merge received gossip via `merge_gossip()`, which uses `HashMap::entry().and_modify().or_insert()` to track the latest node information.
+
+### Example
+
+```rust
+use cinema::remote::cluster::{ClusterNode, Node, NodeStatus};
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() {
+    // Create cluster node
+    let node = Arc::new(ClusterNode::new(Node {
+        id: "node1".into(),
+        addr: "127.0.0.1:7001".into(),
+        status: NodeStatus::Up,
+    }));
+
+    // Start gossip server
+    tokio::spawn(node.clone().start_gossip_server(9001));
+
+    // Gossip to a peer
+    let peer = Node {
+        id: "node2".into(),
+        addr: "127.0.0.1:7002".into(),
+        status: NodeStatus::Up,
+    };
+    node.send_gossip_to(&peer).await.ok();
+
+    // After multiple rounds, all nodes converge to same membership view
+}
+```
+
+### Architecture
+
+```mermaid
+sequenceDiagram
+    participant N1 as Node 1
+    participant N2 as Node 2
+    participant N3 as Node 3
+
+    N1->>N2: GossipMessage [N1, N3]
+    N2->>N1: GossipMessage [N1, N2, N3]
+    N1->>N1: merge_gossip()
+
+    N2->>N3: GossipMessage [N1, N2, N3]
+    N3->>N2: GossipMessage [N2, N3]
+    N2->>N2: merge_gossip()
+
+    Note over N1,N3: After 2 rounds, all nodes know about each other
+```
 
 **Non-goals** (by design):
 - Global ordering guarantees
@@ -561,6 +621,12 @@ graph LR
 - Transparent shared state
 
 Cinema follows Erlang's philosophy: let it crash, retry, and reconcile.
+
+### Coming Soon
+
+- **Failure Detection** - Heartbeat-based node health monitoring
+- **Distributed Registry** - Lookup actors across the cluster
+- **Periodic Gossip Loop** - Automatic background gossip every N seconds
 
 ```mermaid
 graph TB
