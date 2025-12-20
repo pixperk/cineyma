@@ -168,7 +168,6 @@ impl ClusterNode {
                             if let Ok(cluster_msg) = ClusterMessage::decode(envelope.payload.as_slice()) {
                                 match cluster_msg.payload {
                                     Some(cluster_message::Payload::Gossip(gossip)) => {
-                                        println!("[{}] received gossip from {}", cluster.local_node.id, peer);
                                         cluster.merge_gossip(gossip).await;
 
                                         //send our gossip back
@@ -192,8 +191,6 @@ impl ClusterNode {
                                         }
                                     }
                                     Some(cluster_message::Payload::Envelope(actor_envelope)) => {
-                                        println!("[{}] received actor message for {}", cluster.local_node.id, actor_envelope.target_actor);
-
                                         if let Some(ref handler) = handler {
                                             if let Some(response) = handler(actor_envelope).await {
                                                 //wrap response in clustermessage
@@ -270,10 +267,6 @@ impl ClusterNode {
         if let Ok(response) = conn.recv().await {
             if let Ok(cluster_resp) = ClusterMessage::decode(response.payload.as_slice()) {
                 if let Some(cluster_message::Payload::Gossip(their_gossip)) = cluster_resp.payload {
-                    println!(
-                        "[{}] received gossip response from {}",
-                        self.local_node.id, peer.id
-                    );
                     self.merge_gossip(their_gossip).await;
                 }
             }
@@ -350,10 +343,6 @@ impl ClusterNode {
                 };
 
                 if let Some(peer) = peer {
-                    println!(
-                        "[{}] Periodic gossip to {}",
-                        self.local_node.id, peer.id
-                    );
                     let _ = self.send_gossip_to(&peer).await;
                 }
             }
