@@ -13,12 +13,19 @@ message Envelope{
 
 message GossipMessage {
     repeated NodeInfo members = 1;
+    repeated ActorLocation actors = 2;
 }
 
 message NodeInfo{
     string id = 1;
     string addr = 2;
     NodeStatus status = 3;
+}
+
+message ActorLocation{
+    string actor_id = 1;
+    string node_id = 2;
+    string actor_type = 3;
 }
 
 enum NodeStatus {

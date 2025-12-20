@@ -1,5 +1,5 @@
 use crate::remote::{
-    proto::{Envelope, GossipMessage, NodeInfo},
+    proto::{ActorLocation, Envelope, GossipMessage, NodeInfo},
     Connection, TcpConnection, TcpTransport, Transport, TransportError,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -31,6 +31,8 @@ pub struct ClusterNode {
     members: Arc<RwLock<HashMap<String, Node>>>,
     ///last heartbeat time for each node
     last_heartbeat: Arc<RwLock<HashMap<String, Instant>>>,
+    ///actor_id -> (node_id, actor_type)
+    actor_registry: Arc<RwLock<HashMap<String, (String, String)>>>,
 }
 
 impl ClusterNode {
@@ -51,6 +53,7 @@ impl ClusterNode {
             local_node,
             members: Arc::new(RwLock::new(members)),
             last_heartbeat: Arc::new(RwLock::new(heartbeats)),
+            actor_registry: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -70,13 +73,43 @@ impl ClusterNode {
         members.values().cloned().collect()
     }
 
+    ///register an actor running on this node
+    pub async fn register_actor(&self, actor_id: String, actor_type: String) {
+        let mut registry = self.actor_registry.write().await;
+        registry.insert(actor_id, (self.local_node.id.clone(), actor_type));
+    }
+
+    ///lookup which node an actor is running on
+    pub async fn lookup_actor(&self, actor_id: &str) -> Option<(String, String)> {
+        let registry = self.actor_registry.read().await;
+        registry.get(actor_id).cloned()
+    }
+
+    /// Test helper: manually insert an actor location (for testing failure scenarios)
+    #[doc(hidden)]
+    pub async fn test_insert_actor(&self, actor_id: String, node_id: String, actor_type: String) {
+        let mut registry = self.actor_registry.write().await;
+        registry.insert(actor_id, (node_id, actor_type));
+    }
+
     ///create a gossip message with current cluster members
     pub async fn create_gossip_message(&self) -> GossipMessage {
         let members = self.members.read().await;
         let node_infos = members.values().map(|n| NodeInfo::from(n)).collect();
 
+        let registry = self.actor_registry.read().await;
+        let actor_locations = registry
+            .iter()
+            .map(|(actor_id, (node_id, actor_type))| ActorLocation {
+                actor_id: actor_id.clone(),
+                node_id: node_id.clone(),
+                actor_type: actor_type.clone(),
+            })
+            .collect();
+
         GossipMessage {
             members: node_infos,
+            actors: actor_locations,
         }
     }
 
@@ -99,6 +132,15 @@ impl ClusterNode {
 
             // Update heartbeat time
             heartbeats.insert(node.id, Instant::now());
+        }
+
+        // Merge actor locations
+        let mut registry = self.actor_registry.write().await;
+        for actor_loc in gossip.actors {
+            registry.insert(
+                actor_loc.actor_id,
+                (actor_loc.node_id, actor_loc.actor_type),
+            );
         }
     }
 
@@ -207,6 +249,7 @@ impl ClusterNode {
 
                 // Check for failed nodes (failure detection)
                 let now = Instant::now();
+                let mut down_nodes = Vec::new();
                 {
                     let mut members = self.members.write().await;
                     let heartbeats = self.last_heartbeat.read().await;
@@ -222,11 +265,30 @@ impl ClusterNode {
                             if elapsed > suspect_timeout * 2 && node.status != NodeStatus::Down {
                                 println!("[{}] Marking {} as DOWN", self.local_node.id, node_id);
                                 node.status = NodeStatus::Down;
+                                down_nodes.push(node_id.clone());
                             } else if elapsed > suspect_timeout && node.status == NodeStatus::Up {
                                 println!("[{}] Marking {} as SUSPECT", self.local_node.id, node_id);
                                 node.status = NodeStatus::Suspect;
                             }
                         }
+                    }
+                }
+
+                // Clean up actors from DOWN nodes
+                if !down_nodes.is_empty() {
+                    let mut registry = self.actor_registry.write().await;
+                    for down_node_id in &down_nodes {
+                        registry.retain(|actor_id, (node_id, _)| {
+                            if node_id == down_node_id {
+                                println!(
+                                    "[{}] Removing actor {} from DOWN node {}",
+                                    self.local_node.id, actor_id, down_node_id
+                                );
+                                false
+                            } else {
+                                true
+                            }
+                        });
                     }
                 }
 

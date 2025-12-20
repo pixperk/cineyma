@@ -226,3 +226,123 @@ async fn failure_detector_marks_dead_nodes() {
     assert_eq!(node2_status, Some(&NodeStatus::Down));
     println!("Node 2 marked as DOWN");
 }
+
+#[tokio::test]
+async fn actor_registry_spreads_via_gossip() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    // Create 2 nodes
+    let node1 = Arc::new(ClusterNode::new(
+        "node-1".to_string(),
+        "127.0.0.1:9401".to_string(),
+    ));
+    let node2 = Arc::new(ClusterNode::new(
+        "node-2".to_string(),
+        "127.0.0.1:9402".to_string(),
+    ));
+
+    // Start gossip servers
+    tokio::spawn(node1.clone().start_gossip_server(9401));
+    tokio::spawn(node2.clone().start_gossip_server(9402));
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // Node1 registers an actor
+    node1
+        .register_actor("my-actor".to_string(), "MyActorType".to_string())
+        .await;
+
+    // Node1 knows about Node2let
+    node1
+        .add_member(Node {
+            id: "node-2".to_string(),
+            addr: "127.0.0.1:9402".to_string(),
+            status: NodeStatus::Up,
+        })
+        .await;
+
+    // Start periodic gossip
+    let _handle1 = node1
+        .clone()
+        .start_periodic_gossip(Duration::from_millis(100), Duration::from_secs(10));
+    let _handle2 = node2
+        .clone()
+        .start_periodic_gossip(Duration::from_millis(100), Duration::from_secs(10));
+
+    // Wait for gossip to spread
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Node2 should be able to lookup the actor registered on Node1
+    let location = node2.lookup_actor("my-actor").await;
+    assert!(location.is_some(), "Actor should be found via gossip");
+
+    let (node_id, actor_type) = location.unwrap();
+    assert_eq!(node_id, "node-1");
+    assert_eq!(actor_type, "MyActorType");
+
+    println!("Node 2 successfully discovered actor on Node 1: {:?}", (node_id, actor_type));
+}
+
+#[tokio::test]
+async fn actors_cleaned_up_when_node_goes_down() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    // Create node1 (node2 doesn't exist - will fail)
+    let node1 = Arc::new(ClusterNode::new(
+        "node-1".to_string(),
+        "127.0.0.1:9501".to_string(),
+    ));
+
+    // Manually register an actor as if it came from node-2
+    node1
+        .test_insert_actor(
+            "remote-actor".to_string(),
+            "node-2".to_string(),
+            "RemoteType".to_string(),
+        )
+        .await;
+
+    // Also register a local actor
+    node1
+        .register_actor("local-actor".to_string(), "LocalType".to_string())
+        .await;
+
+    // Node1 knows about Node2 (but Node2 doesn't exist)
+    node1
+        .add_member(Node {
+            id: "node-2".to_string(),
+            addr: "127.0.0.1:9502".to_string(),
+            status: NodeStatus::Up,
+        })
+        .await;
+
+    // Verify both actors are in registry
+    assert!(node1.lookup_actor("remote-actor").await.is_some());
+    assert!(node1.lookup_actor("local-actor").await.is_some());
+
+    // Start periodic gossip with failure detection (check every 100ms, suspect after 200ms)
+    let _handle = node1.clone().start_periodic_gossip(
+        Duration::from_millis(100),
+        Duration::from_millis(200),
+    );
+
+    // Wait for node-2 to be marked DOWN (2x suspect = 400ms)
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Node2 should be DOWN
+    let members = node1.get_members().await;
+    let node2_status = members.iter().find(|n| n.id == "node-2").map(|n| &n.status);
+    assert_eq!(node2_status, Some(&NodeStatus::Down));
+
+    // Actor from node-2 should be removed
+    let remote_actor = node1.lookup_actor("remote-actor").await;
+    assert!(remote_actor.is_none(), "Actor from DOWN node should be cleaned up");
+
+    // Local actor should still exist
+    let local_actor = node1.lookup_actor("local-actor").await;
+    assert!(local_actor.is_some(), "Local actor should remain");
+    assert_eq!(local_actor.unwrap().0, "node-1");
+
+    println!("Actor cleanup verified: remote actor removed, local actor retained");
+}
