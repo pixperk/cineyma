@@ -1,4 +1,9 @@
-use cinema::{actor::BoxFuture, Actor, AsyncHandler, Context, Handler, Message};
+#![allow(dead_code)]
+
+use cinema::{
+    actor::{AsyncHandler, BoxFuture},
+    Actor, Context, Handler, Message,
+};
 use prost::Message as ProstMessage;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -55,7 +60,7 @@ pub struct AsyncActor;
 impl Actor for AsyncActor {}
 
 impl AsyncHandler<AsyncCompute> for AsyncActor {
-    fn handle(&mut self, msg: AsyncCompute, _ctx: &mut Context<Self>) -> BoxFuture<u64> {
+    fn handle(&mut self, msg: AsyncCompute, _ctx: &mut Context<Self>) -> BoxFuture<'_, u64> {
         Box::pin(async move {
             // simulate async work
             tokio::time::sleep(std::time::Duration::from_micros(10)).await;
