@@ -6,6 +6,7 @@ A lightweight actor model framework for Rust, inspired by Erlang/OTP, Akka, and 
 
 - **Async/await native** - Built on Tokio
 - **Typed messages** - Compile-time message safety
+- **Bounded mailboxes** - Default capacity of 256 messages prevents OOM from slow consumers
 - **Supervision** - Restart, Stop, Escalate strategies (OTP-style)
 - **Streams** - Process external data streams within actors
 - **Timers** - `run_later` and `run_interval` scheduling
@@ -32,23 +33,24 @@ If you want OTP-style fault tolerance in Rust, use Cinema.
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [Core Concepts](#core-concepts)
+2. [Mailbox Configuration](#mailbox-configuration)
+3. [Core Concepts](#core-concepts)
    - [Context API](#context-api)
    - [Supervision](#supervision)
    - [Streams](#streams)
    - [Registry](#registry)
-3. [Remote Actors](#remote-actors)
+4. [Remote Actors](#remote-actors)
    - [Basic Remote Messaging](#basic-remote-messaging)
    - [Message Router](#message-router)
-4. [Cluster](#cluster)
+5. [Cluster](#cluster)
    - [Gossip Protocol](#gossip-protocol)
    - [Failure Detection](#failure-detection)
    - [Distributed Actor Registry](#distributed-actor-registry)
    - [Cluster-Aware Remote Communication](#cluster-aware-remote-communication)
-5. [Examples](#examples)
-6. [Performance](#performance)
-7. [Architecture](#architecture)
-8. [License](#license)
+6. [Examples](#examples)
+7. [Performance](#performance)
+8. [Architecture](#architecture)
+9. [License](#license)
 
 ---
 
@@ -80,14 +82,51 @@ async fn main() {
     let system = ActorSystem::new();
     let addr = system.spawn(Greeter);
 
-    // fire and forget
-    addr.do_send(Greet("World".into()));
+    // fire and forget (async, applies backpressure if mailbox full)
+    addr.do_send(Greet("World".into())).await.unwrap();
 
     // request-response
     let response = addr.send(Greet("Cinema".into())).await.unwrap();
     println!("{}", response); // "Hello, Cinema!"
 }
 ```
+
+---
+
+## Mailbox Configuration
+
+Cinema uses **bounded mailboxes** (default capacity: 256 messages) to prevent out-of-memory issues from slow consumers.
+
+### Spawning with Custom Capacity
+
+```rust
+// default capacity (256)
+let addr = system.spawn(MyActor);
+
+// custom capacity for high-throughput actors
+let addr = system.spawn_with_capacity(MyActor, 10000);
+
+// child actors with custom capacity
+ctx.spawn_child_with_capacity(ChildActor, 1000);
+```
+
+### Message Sending Patterns
+
+```rust
+// async send with backpressure (blocks if mailbox full)
+addr.do_send(msg).await?;
+
+// non-blocking try_send (returns MailboxFull error if full)
+addr.try_send(msg)?;
+
+// request-response (always async)
+let response = addr.send(msg).await?;
+```
+
+> **When to use which:**
+> - Use `do_send().await` in async contexts when you want backpressure
+> - Use `try_send()` in sync contexts (handlers, lifecycle hooks) or when you want immediate failure
+> - Benchmarks and high-throughput scenarios should use `try_send()` or increase mailbox capacity
 
 ---
 
@@ -99,8 +138,10 @@ async fn main() {
 
 | Method | Description |
 |--------|-------------|
-| `spawn_child(actor)` | Spawn supervised child |
+| `spawn_child(actor)` | Spawn supervised child (default capacity: 256) |
+| `spawn_child_with_capacity(actor, capacity)` | Spawn child with custom mailbox capacity |
 | `spawn_child_with_strategy(factory, strategy)` | Spawn with restart policy |
+| `spawn_child_with_strategy_and_capacity(...)` | Spawn with restart policy and custom capacity |
 | `stop()` | Stop this actor |
 | `address()` | Get own `Addr<Self>` |
 | `run_later(duration, msg)` | Delayed self-message |
@@ -175,7 +216,7 @@ system.register("my_actor", addr);
 
 // lookup
 if let Some(addr) = system.lookup::<MyActor>("my_actor") {
-    addr.do_send(SomeMessage);
+    addr.do_send(SomeMessage).await.unwrap();
 }
 ```
 
@@ -591,7 +632,7 @@ Cinema is designed for high throughput and low latency. All benchmarks run on a 
 | Spawn 100 actors | 228.8 µs | **2.3 µs/actor** |
 | Spawn 1000 actors | 1.5 ms | **1.5 µs/actor** |
 
-**Analysis:** Perfect linear scaling. Minor improvement at 1000 actors due to better CPU cache utilization. Each actor gets its own mailbox (unbounded channel) and spawns a tokio task.
+**Analysis:** Perfect linear scaling. Minor improvement at 1000 actors due to better CPU cache utilization. Each actor gets its own mailbox (bounded channel, default capacity 256) and spawns a tokio task.
 
 ### Message Passing
 
@@ -602,7 +643,7 @@ Cinema is designed for high throughput and low latency. All benchmarks run on a 
 | 10k msgs (single actor) | 12.9 ms | **~775k msgs/sec** |
 | 100k msgs (100 actors × 1k each) | 66.5 ms | **~1.5M msgs/sec** |
 
-**Analysis:** The 10ms sleep in the benchmark dominates. Actual message dispatch overhead is negligible - the unbounded channel is extremely fast. Parallel throughput shows excellent scaling with multiple actors.
+**Analysis:** The 10ms sleep in the benchmark dominates. Actual message dispatch overhead is negligible - bounded channels provide excellent throughput with minimal overhead. Parallel throughput shows excellent scaling with multiple actors.
 
 ### Request-Response Latency
 
