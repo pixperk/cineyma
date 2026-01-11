@@ -12,7 +12,7 @@ fn bench_sync_request_response(c: &mut Criterion) {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         // spawn actor inside runtime context
-        let (sys, addr) = rt.block_on(async {
+        let (_sys, addr) = rt.block_on(async {
             let sys = ActorSystem::new();
             let addr = sys.spawn(Calculator);
             (sys, addr)
@@ -28,7 +28,7 @@ fn bench_sync_request_response(c: &mut Criterion) {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         // spawn actor inside runtime context
-        let (sys, addr) = rt.block_on(async {
+        let (_sys, addr) = rt.block_on(async {
             let sys = ActorSystem::new();
             let addr = sys.spawn(AsyncActor);
             (sys, addr)
@@ -48,7 +48,7 @@ fn bench_sync_request_response(c: &mut Criterion) {
                 let rt = tokio::runtime::Runtime::new().unwrap();
 
                 // spawn actor inside runtime context
-                let (sys, addr) = rt.block_on(async {
+                let (_sys, addr) = rt.block_on(async {
                     let sys = ActorSystem::new();
                     let addr = sys.spawn(Calculator);
                     (sys, addr)

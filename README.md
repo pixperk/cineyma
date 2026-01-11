@@ -480,7 +480,7 @@ let remote: ClusterRemoteAddr<PingPong> = client.remote_addr("pingpong");
 let envelope = remote.send(Ping { msg: "hello" }).await?;
 let pong = Pong::decode(envelope.payload.as_slice())?;
 
-// option 2: high-level call (auto-decodes response) ⭐
+// option 2: high-level call (auto-decodes response) - recommended
 let pong: Pong = remote.call(Ping { msg: "hello" }).await?;
 println!("{}", pong.reply); // "pong: hello"
 
@@ -498,12 +498,12 @@ remote.do_send(Ping { msg: "notify" }).await?;
 
 **Features:**
 
-- ✅ **Location transparency** - send by actor name, not node address
-- ✅ **Automatic discovery** - cluster registry finds the actor's node
-- ✅ **Connection pooling** - reuses connections per node
-- ✅ **Concurrent requests** - multiple requests multiplexed over one connection
-- ✅ **Type-safe API** - compile-time checked request/response types
-- ✅ **Error recovery** - failed connections auto-removed and recreated
+- **Location transparency** - send by actor name, not node address
+- **Automatic discovery** - cluster registry finds the actor's node
+- **Connection pooling** - reuses connections per node
+- **Concurrent requests** - multiple requests multiplexed over one connection
+- **Type-safe API** - compile-time checked request/response types
+- **Error recovery** - failed connections auto-removed and recreated
 
 ---
 
