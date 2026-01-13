@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://cineyma.vercel.app/docs
+    about: Check our documentation for guides and API reference
+  - name: Roadmap
+    url: https://cineyma.vercel.app/roadmap
+    about: See what's planned for future releases

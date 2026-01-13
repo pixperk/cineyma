@@ -1,0 +1,79 @@
+name: Share Your Experience
+description: Share your experience using Cineyma (may be featured on our website)
+labels: ["testimonial"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        We'd love to hear about your experience with Cineyma! Your testimonial may be featured on our website.
+
+  - type: input
+    id: name
+    attributes:
+      label: Your Name
+      description: How would you like to be credited?
+      placeholder: "Jane Doe"
+    validations:
+      required: true
+
+  - type: input
+    id: role
+    attributes:
+      label: Role / Title
+      description: Your job title or role
+      placeholder: "Senior Software Engineer"
+    validations:
+      required: true
+
+  - type: input
+    id: company
+    attributes:
+      label: Company / Organization
+      description: Where do you work? (can be "Independent" or "Personal Project")
+      placeholder: "Acme Corp"
+    validations:
+      required: true
+
+  - type: input
+    id: avatar
+    attributes:
+      label: Avatar URL (Optional)
+      description: URL to your profile picture (GitHub avatar, Gravatar, etc.)
+      placeholder: "https://github.com/username.png"
+
+  - type: textarea
+    id: testimonial
+    attributes:
+      label: Your Testimonial
+      description: Share your experience with Cineyma (2-4 sentences work best)
+      placeholder: |
+        Cineyma has transformed how we build concurrent systems...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: use-case
+    attributes:
+      label: Primary Use Case
+      description: What are you using Cineyma for?
+      options:
+        - Web Services / APIs
+        - Real-time Systems
+        - Distributed Systems
+        - Data Processing
+        - Game Development
+        - IoT / Embedded
+        - Learning / Education
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Consent
+      options:
+        - label: I consent to having my testimonial displayed on the Cineyma website
+          required: true
+        - label: I consent to being contacted for clarification if needed
+          required: false

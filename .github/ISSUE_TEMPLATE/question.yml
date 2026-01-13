@@ -1,0 +1,48 @@
+name: Question / Help
+description: Ask a question or get help with Cineyma
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about Cineyma? We're here to help!
+
+        Before asking, please check:
+        - [Documentation](https://cineyma.vercel.app/docs)
+        - [Existing issues](https://github.com/pixperk/cineyma/issues)
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to accomplish? Include code if relevant.
+      placeholder: |
+        I'm trying to build...
+
+        ```rust
+        // My current code
+        ```
+      render: markdown
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What I've Tried
+      description: What have you already tried or researched?
+      placeholder: I looked at the docs and tried...
+
+  - type: input
+    id: cineyma-version
+    attributes:
+      label: Cineyma Version
+      description: What version are you using?
+      placeholder: "0.1.0"
