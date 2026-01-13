@@ -3,9 +3,15 @@ name = "cineyma"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "A lightweight actor model framework for Rust"
-keywords = ["actor", "async", "concurrent", "distributed"]
-categories = ["concurrency", "asynchronous"]
+description = "A lightweight actor framework for Rust with typed messages, OTP-style supervision, and distributed clustering"
+keywords = ["actor", "async", "concurrent", "distributed", "tokio"]
+categories = ["concurrency", "asynchronous", "network-programming"]
+repository = "https://github.com/pixperk/cineyma"
+homepage = "https://cineyma.vercel.app"
+documentation = "https://cineyma.vercel.app/docs"
+readme = "README.md"
+authors = ["pixperk"]
+rust-version = "1.75"
 
 [workspace]
 members = ["examples/chat", "examples/distributed-kv"]
