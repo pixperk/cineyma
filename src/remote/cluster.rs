@@ -7,7 +7,11 @@ use std::{collections::HashMap, sync::Arc};
 use bytes::BytesMut;
 use prost::Message;
 use rand::seq::IteratorRandom;
-use tokio::{net::TcpListener, sync::RwLock, time::{Duration, Instant}};
+use tokio::{
+    net::TcpListener,
+    sync::RwLock,
+    time::{Duration, Instant},
+};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Node {
@@ -95,7 +99,7 @@ impl ClusterNode {
     ///create a gossip message with current cluster members
     pub async fn create_gossip_message(&self) -> GossipMessage {
         let members = self.members.read().await;
-        let node_infos = members.values().map(|n| NodeInfo::from(n)).collect();
+        let node_infos = members.values().map(NodeInfo::from).collect();
 
         let registry = self.actor_registry.read().await;
         let actor_locations = registry
@@ -161,21 +165,42 @@ impl ClusterNode {
             tokio::spawn(async move {
                 let mut conn = TcpConnection::new(stream);
 
-                loop {
-                    match conn.recv().await {
-                        Ok(envelope) => {
-                            //decode as clustermessage
-                            if let Ok(cluster_msg) = ClusterMessage::decode(envelope.payload.as_slice()) {
-                                match cluster_msg.payload {
-                                    Some(cluster_message::Payload::Gossip(gossip)) => {
-                                        cluster.merge_gossip(gossip, &envelope.sender_node).await;
+                while let Ok(envelope) = conn.recv().await {
+                    //decode as clustermessage
+                    if let Ok(cluster_msg) = ClusterMessage::decode(envelope.payload.as_slice()) {
+                        match cluster_msg.payload {
+                            Some(cluster_message::Payload::Gossip(gossip)) => {
+                                cluster.merge_gossip(gossip, &envelope.sender_node).await;
 
-                                        //send our gossip back
-                                        let our_gossip = cluster.create_gossip_message().await;
+                                //send our gossip back
+                                let our_gossip = cluster.create_gossip_message().await;
+                                let mut buf = BytesMut::new();
+
+                                let cluster_resp = ClusterMessage {
+                                    payload: Some(cluster_message::Payload::Gossip(our_gossip)),
+                                };
+
+                                if cluster_resp.encode(&mut buf).is_ok() {
+                                    let resp = Envelope {
+                                        message_type: "cluster".to_string(),
+                                        payload: buf.to_vec(),
+                                        correlation_id: 0,
+                                        sender_node: cluster.local_node.id.clone(),
+                                        target_actor: "".to_string(),
+                                        is_response: true,
+                                    };
+                                    let _ = conn.send(resp).await;
+                                }
+                            }
+                            Some(cluster_message::Payload::Envelope(actor_envelope)) => {
+                                if let Some(ref handler) = handler {
+                                    if let Some(response) = handler(actor_envelope).await {
+                                        //wrap response in clustermessage
                                         let mut buf = BytesMut::new();
-
                                         let cluster_resp = ClusterMessage {
-                                            payload: Some(cluster_message::Payload::Gossip(our_gossip)),
+                                            payload: Some(cluster_message::Payload::Envelope(
+                                                response,
+                                            )),
                                         };
 
                                         if cluster_resp.encode(&mut buf).is_ok() {
@@ -190,34 +215,10 @@ impl ClusterNode {
                                             let _ = conn.send(resp).await;
                                         }
                                     }
-                                    Some(cluster_message::Payload::Envelope(actor_envelope)) => {
-                                        if let Some(ref handler) = handler {
-                                            if let Some(response) = handler(actor_envelope).await {
-                                                //wrap response in clustermessage
-                                                let mut buf = BytesMut::new();
-                                                let cluster_resp = ClusterMessage {
-                                                    payload: Some(cluster_message::Payload::Envelope(response)),
-                                                };
-
-                                                if cluster_resp.encode(&mut buf).is_ok() {
-                                                    let resp = Envelope {
-                                                        message_type: "cluster".to_string(),
-                                                        payload: buf.to_vec(),
-                                                        correlation_id: 0,
-                                                        sender_node: cluster.local_node.id.clone(),
-                                                        target_actor: "".to_string(),
-                                                        is_response: true,
-                                                    };
-                                                    let _ = conn.send(resp).await;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    None => {}
                                 }
                             }
+                            None => {}
                         }
-                        Err(_) => break,
                     }
                 }
             });
@@ -239,7 +240,10 @@ impl ClusterNode {
 
         let mut buf = BytesMut::new();
         if let Err(e) = cluster_msg.encode(&mut buf) {
-            eprintln!("[{}] failed to encode cluster message: {}", self.local_node.id, e);
+            eprintln!(
+                "[{}] failed to encode cluster message: {}",
+                self.local_node.id, e
+            );
             return Err(TransportError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 e,

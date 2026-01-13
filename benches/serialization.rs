@@ -18,17 +18,13 @@ fn bench_prost_encode_decode(c: &mut Criterion) {
         };
 
         // encode benchmark
-        group.bench_with_input(
-            BenchmarkId::new("prost_encode", size),
-            &msg,
-            |b, msg| {
-                b.iter(|| {
-                    let mut buf = Vec::new();
-                    msg.encode(&mut buf).unwrap();
-                    black_box(buf);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("prost_encode", size), &msg, |b, msg| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                msg.encode(&mut buf).unwrap();
+                black_box(buf);
+            });
+        });
 
         // decode benchmark
         let encoded = {
@@ -49,18 +45,14 @@ fn bench_prost_encode_decode(c: &mut Criterion) {
         );
 
         // round-trip (encode + decode)
-        group.bench_with_input(
-            BenchmarkId::new("roundtrip", size),
-            &msg,
-            |b, msg| {
-                b.iter(|| {
-                    let mut buf = Vec::new();
-                    msg.encode(&mut buf).unwrap();
-                    let decoded = BenchRequest::decode(buf.as_slice()).unwrap();
-                    black_box(decoded);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("roundtrip", size), &msg, |b, msg| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                msg.encode(&mut buf).unwrap();
+                let decoded = BenchRequest::decode(buf.as_slice()).unwrap();
+                black_box(decoded);
+            });
+        });
     }
 
     group.finish();

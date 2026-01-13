@@ -255,8 +255,7 @@ impl<A: Actor> Context<A> {
                     let stream_poll = std::future::poll_fn(|task_ctx| {
                         if streams.is_empty() {
                             Poll::Pending
-                        } else if poll_streams(&mut streams, &mut child, &mut child_ctx, task_ctx)
-                        {
+                        } else if poll_streams(&mut streams, &mut child, &mut child_ctx, task_ctx) {
                             Poll::Ready(())
                         } else {
                             Poll::Pending

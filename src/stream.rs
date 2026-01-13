@@ -80,7 +80,7 @@ pub fn poll_streams<A: Actor>(
                 true // keep stream, might have more items
             }
             Poll::Ready(false) => false, // stream finished, remove it
-            Poll::Pending => true,        // no item yet, keep stream
+            Poll::Pending => true,       // no item yet, keep stream
         }
     });
 

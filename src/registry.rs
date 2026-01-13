@@ -11,6 +11,12 @@ pub struct Registry {
     actors: RwLock<HashMap<String, Box<dyn Any + Send + Sync>>>,
 }
 
+impl Default for Registry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Registry {
     pub fn new() -> Self {
         Self {

@@ -32,7 +32,12 @@ pub struct RemoteAddr<A> {
 }
 
 impl<A> RemoteAddr<A> {
-    pub fn new(local_node_id: &str, remote_node_id: &str, actor_name: &str, client: RemoteClient) -> Self {
+    pub fn new(
+        local_node_id: &str,
+        remote_node_id: &str,
+        actor_name: &str,
+        client: RemoteClient,
+    ) -> Self {
         Self {
             id: RemoteActorId {
                 node: NodeId(remote_node_id.to_string()),
@@ -63,8 +68,12 @@ impl<A> RemoteAddr<A> {
     where
         M: RemoteMessage,
     {
-        let envelope =
-            Envelope::from_message(&msg, next_correlation_id(), &self.local_node.0, &self.id.actor_name);
+        let envelope = Envelope::from_message(
+            &msg,
+            next_correlation_id(),
+            &self.local_node.0,
+            &self.id.actor_name,
+        );
         self.client.send(envelope).await
     }
 }

@@ -40,7 +40,12 @@ impl LocalNode {
     }
 
     /// Create a remote address to an actor on another node
-    pub fn remote_addr<A>(&self, remote_node: &str, actor_name: &str, client: RemoteClient) -> RemoteAddr<A> {
+    pub fn remote_addr<A>(
+        &self,
+        remote_node: &str,
+        actor_name: &str,
+        client: RemoteClient,
+    ) -> RemoteAddr<A> {
         RemoteAddr::new(&self.id.0, remote_node, actor_name, client)
     }
 }
@@ -91,7 +96,7 @@ where
         let addr = addr.clone();
         Box::pin(async move {
             if let Ok(msg) = M::decode(envelope.payload.as_slice()) {
-                let _ = addr.do_send(msg);
+                let _ = addr.do_send(msg).await;
             }
             None // no response
         })

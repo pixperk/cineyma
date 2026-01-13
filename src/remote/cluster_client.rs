@@ -72,11 +72,8 @@ impl ClusterClient {
         envelope: Envelope,
     ) -> Result<Envelope, TransportError> {
         //lookup actor in cluster
-        let (node_id, _actor_type) = self
-            .cluster
-            .lookup_actor(actor_id)
-            .await
-            .ok_or_else(|| {
+        let (node_id, _actor_type) =
+            self.cluster.lookup_actor(actor_id).await.ok_or_else(|| {
                 TransportError::Io(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("actor {} not found in cluster", actor_id),
@@ -114,11 +111,14 @@ impl ClusterClient {
 
         //get or create connection - remoteclient handles correlation tracking
         let mut pool = self.pool.lock().await;
-        let client = pool.get_or_connect(&node.addr, &self.transport).await.map_err(|e| {
-            //on connection failure, remove from pool to force reconnect next time
-            pool.remove(&node.addr);
-            e
-        })?;
+        let client = pool
+            .get_or_connect(&node.addr, &self.transport)
+            .await
+            .map_err(|e| {
+                //on connection failure, remove from pool to force reconnect next time
+                pool.remove(&node.addr);
+                e
+            })?;
         drop(pool); //release lock before async send
 
         //send via remoteclient (handles correlation id tracking internally)
@@ -134,8 +134,7 @@ impl ClusterClient {
 
         //unwrap clustermessage
         if let Ok(cluster_resp) = ClusterMessage::decode(response.payload.as_slice()) {
-            if let Some(cluster_message::Payload::Envelope(actor_response)) = cluster_resp.payload
-            {
+            if let Some(cluster_message::Payload::Envelope(actor_response)) = cluster_resp.payload {
                 return Ok(actor_response);
             }
         }
@@ -153,11 +152,8 @@ impl ClusterClient {
         envelope: Envelope,
     ) -> Result<(), TransportError> {
         //lookup actor in cluster
-        let (node_id, _actor_type) = self
-            .cluster
-            .lookup_actor(actor_id)
-            .await
-            .ok_or_else(|| {
+        let (node_id, _actor_type) =
+            self.cluster.lookup_actor(actor_id).await.ok_or_else(|| {
                 TransportError::Io(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("actor {} not found in cluster", actor_id),
@@ -195,10 +191,13 @@ impl ClusterClient {
 
         //get or create connection
         let mut pool = self.pool.lock().await;
-        let client = pool.get_or_connect(&node.addr, &self.transport).await.map_err(|e| {
-            pool.remove(&node.addr);
-            e
-        })?;
+        let client = pool
+            .get_or_connect(&node.addr, &self.transport)
+            .await
+            .map_err(|e| {
+                pool.remove(&node.addr);
+                e
+            })?;
         drop(pool);
 
         //fire-and-forget send

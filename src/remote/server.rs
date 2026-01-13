@@ -5,9 +5,8 @@ use tokio::net::TcpListener;
 use crate::remote::{proto::Envelope, Connection, TcpConnection};
 
 /// Async handler for incoming envelopes
-pub type EnvelopeHandler = Arc<
-    dyn Fn(Envelope) -> Pin<Box<dyn Future<Output = Option<Envelope>> + Send>> + Send + Sync
->;
+pub type EnvelopeHandler =
+    Arc<dyn Fn(Envelope) -> Pin<Box<dyn Future<Output = Option<Envelope>> + Send>> + Send + Sync>;
 
 ///remote server accepts connections and dispatches to local actors
 pub struct RemoteServer {
@@ -35,21 +34,15 @@ impl RemoteServer {
                     tokio::spawn(async move {
                         let mut conn = TcpConnection::new(stream);
 
-                        loop {
-                            match conn.recv().await {
-                                Ok(envelope) => {
-                                    println!("Received: target={}", envelope.target_actor);
+                        while let Ok(envelope) = conn.recv().await {
+                            println!("Received: target={}", envelope.target_actor);
 
-                                    //call handler to process (async)
-                                    if let Some(response) = (handler)(envelope).await {
-                                        if let Err(e) = conn.send(response).await {
-                                            eprintln!("Failed to send response: {:?}", e);
-                                            break;
-                                        }
-                                    }
+                            //call handler to process (async)
+                            if let Some(response) = (handler)(envelope).await {
+                                if let Err(e) = conn.send(response).await {
+                                    eprintln!("Failed to send response: {:?}", e);
+                                    break;
                                 }
-
-                                Err(_) => break, //conn closed
                             }
                         }
                     });

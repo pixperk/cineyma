@@ -1,19 +1,14 @@
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SupervisorStrategy {
     ///stop the actor on failure (default)
+    #[default]
     Stop,
     ///restart the actor on failure
     Restart { max_restarts: u32, within: Duration },
     ///escalate to parent supervisor
     Escalate,
-}
-
-impl Default for SupervisorStrategy {
-    fn default() -> Self {
-        Self::Stop
-    }
 }
 
 impl SupervisorStrategy {
