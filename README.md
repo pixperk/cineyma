@@ -1,4 +1,4 @@
-# Cinema
+# cineyma
 
 A lightweight actor model framework for Rust, inspired by Erlang/OTP, Akka, and actix.
 
@@ -17,16 +17,16 @@ A lightweight actor model framework for Rust, inspired by Erlang/OTP, Akka, and 
 
 ## Design Philosophy
 
-Cinema prioritizes:
+cineyma prioritizes:
 - **Explicit supervision** over silent recovery
 - **Typed messaging** over dynamic routing
 - **Sequential state ownership** over shared concurrency
 - **Minimal magic**, maximal control
 
 If you want HTTP-first or macro-heavy ergonomics, use [actix](https://actix.rs/).
-If you want OTP-style fault tolerance in Rust, use Cinema.
+If you want OTP-style fault tolerance in Rust, use cineyma.
 
-> **Note on panics:** Cinema treats panics inside actors as failures, similar to Erlang process crashes. Panics are caught at actor boundaries and never crash the runtime.
+> **Note on panics:** cineyma treats panics inside actors as failures, similar to Erlang process crashes. Panics are caught at actor boundaries and never crash the runtime.
 
 ---
 
@@ -57,7 +57,7 @@ If you want OTP-style fault tolerance in Rust, use Cinema.
 ## Quick Start
 
 ```rust
-use cinema::{Actor, Handler, Message, ActorSystem, Context};
+use cineyma::{Actor, Handler, Message, ActorSystem, Context};
 
 // define a message
 struct Greet(String);
@@ -86,8 +86,8 @@ async fn main() {
     addr.do_send(Greet("World".into())).await.unwrap();
 
     // request-response
-    let response = addr.send(Greet("Cinema".into())).await.unwrap();
-    println!("{}", response); // "Hello, Cinema!"
+    let response = addr.send(Greet("cineyma".into())).await.unwrap();
+    println!("{}", response); // "Hello, cineyma!"
 }
 ```
 
@@ -95,7 +95,7 @@ async fn main() {
 
 ## Mailbox Configuration
 
-Cinema uses **bounded mailboxes** (default capacity: 256 messages) to prevent out-of-memory issues from slow consumers.
+cineyma uses **bounded mailboxes** (default capacity: 256 messages) to prevent out-of-memory issues from slow consumers.
 
 ### Spawning with Custom Capacity
 
@@ -152,7 +152,7 @@ let response = addr.send(msg).await?;
 ### Supervision
 
 ```rust
-use cinema::{Actor, Context, SupervisorStrategy};
+use cineyma::{Actor, Context, SupervisorStrategy};
 use std::time::Duration;
 
 struct Parent;
@@ -179,7 +179,7 @@ impl Actor for Child {}
 ### Streams
 
 ```rust
-use cinema::{Actor, StreamHandler, Context};
+use cineyma::{Actor, StreamHandler, Context};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 struct MyActor {
@@ -226,14 +226,14 @@ if let Some(addr) = system.lookup::<MyActor>("my_actor") {
 
 ## Remote Actors
 
-Cinema supports sending messages to actors on other nodes over TCP with Protocol Buffers serialization.
+cineyma supports sending messages to actors on other nodes over TCP with Protocol Buffers serialization.
 
 ### Basic Remote Messaging
 
 **Define messages** (protobuf serializable):
 
 ```rust
-use cinema::{Message, remote::RemoteMessage};
+use cineyma::{Message, remote::RemoteMessage};
 use prost::Message as ProstMessage;
 
 // request message
@@ -262,8 +262,8 @@ impl RemoteMessage for AddResult {}
 **Server side:**
 
 ```rust
-use cinema::{Actor, Handler, ActorSystem, Context};
-use cinema::remote::{LocalNode, RemoteServer};
+use cineyma::{Actor, Handler, ActorSystem, Context};
+use cineyma::remote::{LocalNode, RemoteServer};
 
 struct Calculator { value: i32 }
 
@@ -292,7 +292,7 @@ async fn main() {
 **Client side:**
 
 ```rust
-use cinema::remote::{RemoteClient, TcpTransport, Transport};
+use cineyma::remote::{RemoteClient, TcpTransport, Transport};
 
 #[tokio::main]
 async fn main() {
@@ -313,7 +313,7 @@ async fn main() {
 Handle multiple message types:
 
 ```rust
-use cinema::remote::MessageRouter;
+use cineyma::remote::MessageRouter;
 
 let handler = MessageRouter::new()
     .route::<Add>(node.handler::<Calculator, Add>(calc.clone()))
@@ -328,7 +328,7 @@ let server = RemoteServer::bind("0.0.0.0:8080", handler).await.unwrap();
 
 ## Cluster
 
-Cinema provides a gossip-based cluster with:
+cineyma provides a gossip-based cluster with:
 - **Membership management** - Track which nodes are in the cluster
 - **Failure detection** - Mark nodes as SUSPECT/DOWN based on heartbeat
 - **Distributed actor registry** - Discover which node hosts an actor
@@ -339,7 +339,7 @@ Cinema provides a gossip-based cluster with:
 Nodes exchange membership information to achieve eventual consistency:
 
 ```rust
-use cinema::remote::cluster::{ClusterNode, Node, NodeStatus};
+use cineyma::remote::cluster::{ClusterNode, Node, NodeStatus};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -409,9 +409,9 @@ let location = node1.lookup_actor("user-store").await;
 **Server setup:**
 
 ```rust
-use cinema::{Actor, Handler, ActorSystem, Context};
-use cinema::remote::{LocalNode, MessageRouter};
-use cinema::remote::cluster::ClusterNode;
+use cineyma::{Actor, Handler, ActorSystem, Context};
+use cineyma::remote::{LocalNode, MessageRouter};
+use cineyma::remote::cluster::ClusterNode;
 use std::sync::Arc;
 
 // actor
@@ -468,7 +468,7 @@ async fn main() {
 **Client usage:**
 
 ```rust
-use cinema::remote::{ClusterClient, ClusterRemoteAddr};
+use cineyma::remote::{ClusterClient, ClusterRemoteAddr};
 
 // create cluster client
 let client = ClusterClient::new(node1.clone());
@@ -514,7 +514,7 @@ remote.do_send(Ping { msg: "notify" }).await?;
 A simple in-memory user store - **no locks needed!**
 
 ```rust
-use cinema::{Actor, Handler, Message, ActorSystem, Context};
+use cineyma::{Actor, Handler, Message, ActorSystem, Context};
 use std::collections::HashMap;
 
 // messages
@@ -621,7 +621,7 @@ See [examples/distributed-kv/README.md](examples/distributed-kv/README.md) for d
 
 ## Performance
 
-Cinema is designed for high throughput and low latency. All benchmarks run on a single machine using [Criterion](https://github.com/bheisler/criterion.rs).
+cineyma is designed for high throughput and low latency. All benchmarks run on a single machine using [Criterion](https://github.com/bheisler/criterion.rs).
 
 ### Actor Lifecycle
 
@@ -657,7 +657,7 @@ Cinema is designed for high throughput and low latency. All benchmarks run on a 
 **Analysis:**
 - Single request-response: ~18µs round-trip (send → handler → response via oneshot)
 - Pipelining via `join_all` shows **massive improvements** - 100 concurrent requests achieve 28× better per-request latency
-- Cinema's async runtime handles concurrent requests efficiently
+- cineyma's async runtime handles concurrent requests efficiently
 
 ### Cluster Performance
 

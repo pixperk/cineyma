@@ -23,7 +23,7 @@ use prost::Message as ProstMessage;
 use crate::{remote::proto::Envelope, Message};
 
 pub mod proto {
-    include!(concat!(env!("OUT_DIR"), "/cinema.rs"));
+    include!(concat!(env!("OUT_DIR"), "/cineyma.rs"));
 }
 
 /// Trait for remote messages (can be sent over the network).

@@ -1,5 +1,5 @@
+use cineyma::ActorSystem;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use cinema::ActorSystem;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -22,9 +22,12 @@ fn bench_do_send_throughput(c: &mut Criterion) {
                         let count = Arc::new(AtomicUsize::new(0));
                         let sys = ActorSystem::new();
                         // Use larger capacity for high-throughput benchmark
-                        let addr = sys.spawn_with_capacity(CounterActor {
-                            count: count.clone(),
-                        }, 10000);
+                        let addr = sys.spawn_with_capacity(
+                            CounterActor {
+                                count: count.clone(),
+                            },
+                            10000,
+                        );
 
                         // send messages (use try_send for non-blocking throughput test)
                         for _ in 0..msg_count {
@@ -50,9 +53,12 @@ fn bench_do_send_throughput(c: &mut Criterion) {
                     let count = Arc::new(AtomicUsize::new(0));
                     // Use larger capacity for parallel throughput benchmark
                     actors.push((
-                        sys.spawn_with_capacity(CounterActor {
-                            count: count.clone(),
-                        }, 1000),
+                        sys.spawn_with_capacity(
+                            CounterActor {
+                                count: count.clone(),
+                            },
+                            1000,
+                        ),
                         count,
                     ));
                 }

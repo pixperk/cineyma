@@ -1,6 +1,9 @@
 mod kv_store;
 
-use cinema::{remote::{ClusterClient, LocalNode, MessageRouter}, ActorSystem};
+use cineyma::{
+    remote::{ClusterClient, LocalNode, MessageRouter},
+    ActorSystem,
+};
 use kv_store::KVStore;
 use std::{env, sync::Arc, time::Duration};
 
@@ -36,7 +39,7 @@ async fn main() {
     let addr = format!("127.0.0.1:{}", port);
 
     //create cluster node
-    let cluster = Arc::new(cinema::remote::cluster::ClusterNode::new(
+    let cluster = Arc::new(cineyma::remote::cluster::ClusterNode::new(
         node_id.clone(),
         addr.clone(),
     ));
@@ -45,14 +48,18 @@ async fn main() {
     let system = ActorSystem::new();
     let handler = if node_id == "node-1" {
         let store = system.spawn(KVStore::new());
-        cluster.register_actor("kv-store".to_string(), "KVStore".to_string()).await;
+        cluster
+            .register_actor("kv-store".to_string(), "KVStore".to_string())
+            .await;
 
         let local_node = LocalNode::new(node_id);
-        Some(MessageRouter::new()
-            .route::<GetRequest>(local_node.handler::<KVStore, GetRequest>(store.clone()))
-            .route::<SetRequest>(local_node.handler::<KVStore, SetRequest>(store.clone()))
-            .route::<DeleteRequest>(local_node.handler::<KVStore, DeleteRequest>(store.clone()))
-            .build())
+        Some(
+            MessageRouter::new()
+                .route::<GetRequest>(local_node.handler::<KVStore, GetRequest>(store.clone()))
+                .route::<SetRequest>(local_node.handler::<KVStore, SetRequest>(store.clone()))
+                .route::<DeleteRequest>(local_node.handler::<KVStore, DeleteRequest>(store.clone()))
+                .build(),
+        )
     } else {
         None
     };
@@ -63,19 +70,18 @@ async fn main() {
     //join existing cluster if seed provided
     if let Some(seed) = seed_addr {
         println!("joining cluster via seed: {}", seed);
-        let seed_node = cinema::remote::cluster::Node {
+        let seed_node = cineyma::remote::cluster::Node {
             id: "temp-seed".to_string(),
             addr: seed.to_string(),
-            status: cinema::remote::cluster::NodeStatus::Up,
+            status: cineyma::remote::cluster::NodeStatus::Up,
         };
         let _ = cluster.send_gossip_to(&seed_node).await;
     }
 
     //start periodic gossip
-    let _gossip_handle = cluster.clone().start_periodic_gossip(
-        Duration::from_secs(2),
-        Duration::from_secs(10),
-    );
+    let _gossip_handle = cluster
+        .clone()
+        .start_periodic_gossip(Duration::from_secs(2), Duration::from_secs(10));
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -107,7 +113,12 @@ async fn main() {
                 }
                 let key = parts[1];
                 let remote = client.remote_addr::<KVStore>("kv-store");
-                match remote.call(GetRequest { key: key.to_string() }).await {
+                match remote
+                    .call(GetRequest {
+                        key: key.to_string(),
+                    })
+                    .await
+                {
                     Ok(resp) => {
                         if let Some(value) = resp.value {
                             println!("{}", value);
@@ -126,10 +137,13 @@ async fn main() {
                 let key = parts[1];
                 let value = parts[2..].join(" ");
                 let remote = client.remote_addr::<KVStore>("kv-store");
-                match remote.call(SetRequest {
-                    key: key.to_string(),
-                    value: value.clone(),
-                }).await {
+                match remote
+                    .call(SetRequest {
+                        key: key.to_string(),
+                        value: value.clone(),
+                    })
+                    .await
+                {
                     Ok(_) => println!("OK"),
                     Err(e) => println!("error: {:?}", e),
                 }
@@ -141,7 +155,12 @@ async fn main() {
                 }
                 let key = parts[1];
                 let remote = client.remote_addr::<KVStore>("kv-store");
-                match remote.call(DeleteRequest { key: key.to_string() }).await {
+                match remote
+                    .call(DeleteRequest {
+                        key: key.to_string(),
+                    })
+                    .await
+                {
                     Ok(resp) => {
                         if resp.deleted {
                             println!("deleted");

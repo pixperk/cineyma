@@ -7,7 +7,7 @@
 //! - ChatServer: manages connected clients, broadcasts messages
 //! - ClientSession: one per TCP connection, reads via stream
 
-use cinema::{Actor, ActorSystem, Addr, Context, Handler, Message, StreamHandler};
+use cineyma::{Actor, ActorSystem, Addr, Context, Handler, Message, StreamHandler};
 use std::collections::HashMap;
 use std::io;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

@@ -1,7 +1,9 @@
-use cinema::{Actor, Context, Handler, Message};
+use cineyma::{Actor, Context, Handler, Message};
 use std::collections::HashMap;
 
-use crate::proto::{DeleteRequest, DeleteResponse, GetRequest, GetResponse, SetRequest, SetResponse};
+use crate::proto::{
+    DeleteRequest, DeleteResponse, GetRequest, GetResponse, SetRequest, SetResponse,
+};
 
 ///simple in-memory key-value store actor
 pub struct KVStore {
@@ -22,32 +24,32 @@ impl Actor for KVStore {}
 impl Message for GetRequest {
     type Result = GetResponse;
 }
-impl cinema::remote::RemoteMessage for GetRequest {}
+impl cineyma::remote::RemoteMessage for GetRequest {}
 
 impl Message for GetResponse {
     type Result = ();
 }
-impl cinema::remote::RemoteMessage for GetResponse {}
+impl cineyma::remote::RemoteMessage for GetResponse {}
 
 impl Message for SetRequest {
     type Result = SetResponse;
 }
-impl cinema::remote::RemoteMessage for SetRequest {}
+impl cineyma::remote::RemoteMessage for SetRequest {}
 
 impl Message for SetResponse {
     type Result = ();
 }
-impl cinema::remote::RemoteMessage for SetResponse {}
+impl cineyma::remote::RemoteMessage for SetResponse {}
 
 impl Message for DeleteRequest {
     type Result = DeleteResponse;
 }
-impl cinema::remote::RemoteMessage for DeleteRequest {}
+impl cineyma::remote::RemoteMessage for DeleteRequest {}
 
 impl Message for DeleteResponse {
     type Result = ();
 }
-impl cinema::remote::RemoteMessage for DeleteResponse {}
+impl cineyma::remote::RemoteMessage for DeleteResponse {}
 
 //handler implementations
 impl Handler<GetRequest> for KVStore {

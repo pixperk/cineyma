@@ -1,6 +1,6 @@
 # distributed key-value store
 
-a simple distributed key-value store demonstrating cinema's cluster capabilities.
+a simple distributed key-value store demonstrating cineyma's cluster capabilities.
 
 ## features
 

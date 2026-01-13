@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-cinema = { path = "../.." }
+cineyma = { path = "../.." }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 prost = "0.14"
 bytes = "1"

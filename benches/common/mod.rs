@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use cinema::{
+use cineyma::{
     actor::{AsyncHandler, BoxFuture},
     Actor, Context, Handler, Message,
 };
@@ -81,7 +81,7 @@ impl Message for BenchPing {
     type Result = ();
 }
 
-impl cinema::remote::RemoteMessage for BenchPing {}
+impl cineyma::remote::RemoteMessage for BenchPing {}
 
 #[derive(Clone, ProstMessage)]
 pub struct BenchRequest {
@@ -95,7 +95,7 @@ impl Message for BenchRequest {
     type Result = BenchResponse;
 }
 
-impl cinema::remote::RemoteMessage for BenchRequest {}
+impl cineyma::remote::RemoteMessage for BenchRequest {}
 
 #[derive(Clone, ProstMessage)]
 pub struct BenchResponse {
@@ -109,7 +109,7 @@ impl Message for BenchResponse {
     type Result = ();
 }
 
-impl cinema::remote::RemoteMessage for BenchResponse {}
+impl cineyma::remote::RemoteMessage for BenchResponse {}
 
 // ===== TEST HELPERS =====
 

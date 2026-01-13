@@ -1,4 +1,4 @@
-use cinema::ActorSystem;
+use cineyma::ActorSystem;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 mod common;

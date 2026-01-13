@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cinema = { path = "../.." }
+cineyma = { path = "../.." }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time", "io-util", "net"] }
 tokio-stream = { version = "0.1", features = ["io-util"] }

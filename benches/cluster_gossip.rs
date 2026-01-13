@@ -1,4 +1,4 @@
-use cinema::remote::cluster::{ClusterNode, Node, NodeStatus};
+use cineyma::remote::cluster::{ClusterNode, Node, NodeStatus};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::sync::Arc;
 

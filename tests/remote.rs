@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cinema::{
+use cineyma::{
     remote::{
         deserialize_payload, proto::Envelope, register_message, Connection, EnvelopeHandler,
         LocalNode, RemoteAddr, RemoteClient, RemoteMessage, RemoteServer, TcpConnection,
@@ -420,17 +420,29 @@ async fn two_servers_same_name() {
     static HELLO_CALLS: AtomicUsize = AtomicUsize::new(0);
 
     // Calculator Actor
-    struct Calculator { value: i32 }
+    struct Calculator {
+        value: i32,
+    }
     impl Actor for Calculator {}
 
     #[derive(Clone, prost::Message)]
-    struct Add { #[prost(int32, tag = "1")] n: i32 }
-    impl Message for Add { type Result = AddResult; }
+    struct Add {
+        #[prost(int32, tag = "1")]
+        n: i32,
+    }
+    impl Message for Add {
+        type Result = AddResult;
+    }
     impl RemoteMessage for Add {}
 
     #[derive(Clone, prost::Message)]
-    struct AddResult { #[prost(int32, tag = "1")] value: i32 }
-    impl Message for AddResult { type Result = (); }
+    struct AddResult {
+        #[prost(int32, tag = "1")]
+        value: i32,
+    }
+    impl Message for AddResult {
+        type Result = ();
+    }
     impl RemoteMessage for AddResult {}
 
     impl Handler<Add> for Calculator {
@@ -459,14 +471,21 @@ async fn two_servers_same_name() {
     // Server 1: Calculator - named "calc-server"
     let calc_addr = system.spawn(Calculator { value: 100 });
     let node1 = LocalNode::new("calc-server");
-    let server1 = RemoteServer::bind("127.0.0.1:0", node1.handler::<Calculator, Add>(calc_addr)).await.unwrap();
+    let server1 = RemoteServer::bind("127.0.0.1:0", node1.handler::<Calculator, Add>(calc_addr))
+        .await
+        .unwrap();
     let server1_addr = server1.local_addr().unwrap();
     tokio::spawn(server1.run());
 
     // Server 2: HelloPrinter - ALSO named "calc-server"!
     let hello_addr = system.spawn(HelloPrinter);
     let node2 = LocalNode::new("calc-server");
-    let server2 = RemoteServer::bind("127.0.0.1:0", node2.handler::<HelloPrinter, Add>(hello_addr)).await.unwrap();
+    let server2 = RemoteServer::bind(
+        "127.0.0.1:0",
+        node2.handler::<HelloPrinter, Add>(hello_addr),
+    )
+    .await
+    .unwrap();
     let server2_addr = server2.local_addr().unwrap();
     tokio::spawn(server2.run());
 
@@ -486,8 +505,10 @@ async fn two_servers_same_name() {
     let client2 = RemoteClient::new(conn2);
     let remote2: RemoteAddr<HelloPrinter> = client2.remote_addr("calc-server", "calculator");
 
-    let result1 = AddResult::decode(remote1.send(Add { n: 5 }).await.unwrap().payload.as_slice()).unwrap();
-    let result2 = AddResult::decode(remote2.send(Add { n: 5 }).await.unwrap().payload.as_slice()).unwrap();
+    let result1 =
+        AddResult::decode(remote1.send(Add { n: 5 }).await.unwrap().payload.as_slice()).unwrap();
+    let result2 =
+        AddResult::decode(remote2.send(Add { n: 5 }).await.unwrap().payload.as_slice()).unwrap();
 
     println!("Response from server1: {}", result1.value);
     println!("Response from server2: {}", result2.value);

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use cinema::{
+use cineyma::{
     address::ChildHandle, message::Terminated, Actor, ActorSystem, Addr, Context, Handler, Message,
     SupervisorStrategy,
 };

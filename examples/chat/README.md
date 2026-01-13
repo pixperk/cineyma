@@ -1,6 +1,6 @@
 # tcp chat server
 
-a simple multi-user chat server demonstrating cinema's stream handling and actor communication.
+a simple multi-user chat server demonstrating cineyma's stream handling and actor communication.
 
 ## features
 

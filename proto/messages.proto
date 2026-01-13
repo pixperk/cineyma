@@ -1,5 +1,5 @@
 syntax = "proto3";
-package cinema;
+package cineyma;
 
 ///multiplexed message wrapper for cluster protocol
 message ClusterMessage {

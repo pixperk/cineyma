@@ -1,14 +1,14 @@
-//! # Cinema
+//! # cineyma
 //!
 //! A lightweight, production-focused actor framework for Rust.
 //!
-//! Cinema provides typed actors with bounded mailboxes, OTP-style supervision,
+//! cineyma provides typed actors with bounded mailboxes, OTP-style supervision,
 //! and distributed messaging over TCP with Protocol Buffers.
 //!
 //! ## Quick Start
 //!
 //! ```rust
-//! use cinema::{Actor, Handler, Message, ActorSystem, Context};
+//! use cineyma::{Actor, Handler, Message, ActorSystem, Context};
 //!
 //! // Define a message
 //! struct Greet(String);
@@ -32,8 +32,8 @@
 //!     let addr = system.spawn(Greeter);
 //!
 //!     // Request-response
-//!     let response = addr.send(Greet("Cinema".into())).await.unwrap();
-//!     assert_eq!(response, "Hello, Cinema!");
+//!     let response = addr.send(Greet("cineyma".into())).await.unwrap();
+//!     assert_eq!(response, "Hello, cineyma!");
 //! }
 //! ```
 //!
@@ -78,7 +78,7 @@
 //! Actors can supervise children with restart policies:
 //!
 //! ```rust,ignore
-//! use cinema::SupervisorStrategy;
+//! use cineyma::SupervisorStrategy;
 //! use std::time::Duration;
 //!
 //! // Restart up to 3 times within 10 seconds

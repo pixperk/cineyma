@@ -1,4 +1,4 @@
-use cinema::remote::cluster::{ClusterNode, Node, NodeStatus};
+use cineyma::remote::cluster::{ClusterNode, Node, NodeStatus};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::sync::Arc;
 use std::time::Duration;
@@ -51,10 +51,9 @@ fn bench_failure_detection(c: &mut Criterion) {
 
                 // start periodic gossip with tight timeouts
                 let suspect_timeout = Duration::from_millis(100);
-                let _handle = node1.clone().start_periodic_gossip(
-                    Duration::from_millis(50),
-                    suspect_timeout,
-                );
+                let _handle = node1
+                    .clone()
+                    .start_periodic_gossip(Duration::from_millis(50), suspect_timeout);
 
                 // measure time to detect node-3 as suspect (it won't send gossip back)
                 let start = std::time::Instant::now();

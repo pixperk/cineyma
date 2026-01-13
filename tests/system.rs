@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use cinema::{Actor, Handler, Message};
+use cineyma::{Actor, Handler, Message};
 
 // ======== Actor Lifecycle Tests ========
 
@@ -18,13 +18,13 @@ struct TestActor {
 }
 
 impl Actor for TestActor {
-    fn stopped(&mut self, _ctx: &mut cinema::Context<Self>) {
+    fn stopped(&mut self, _ctx: &mut cineyma::Context<Self>) {
         self.stopped.store(true, Ordering::SeqCst);
     }
 }
 
 impl Handler<StopMe> for TestActor {
-    fn handle(&mut self, _msg: StopMe, ctx: &mut cinema::Context<Self>) {
+    fn handle(&mut self, _msg: StopMe, ctx: &mut cineyma::Context<Self>) {
         ctx.stop();
     }
 }
@@ -36,7 +36,7 @@ async fn actor_stops_itself() {
         stopped: stopped.clone(),
     };
 
-    let system = cinema::system::ActorSystem::new();
+    let system = cineyma::system::ActorSystem::new();
     let addr = system.spawn(actor);
 
     //give some time for the actor to start
@@ -55,7 +55,7 @@ async fn system_shutdown_stops_actor() {
         stopped: stopped.clone(),
     };
 
-    let sys = cinema::system::ActorSystem::new();
+    let sys = cineyma::system::ActorSystem::new();
     let _addr = sys.spawn(actor);
 
     //give some time for the actor to start
@@ -75,39 +75,39 @@ struct RegistryActor;
 impl Actor for RegistryActor {}
 
 impl Handler<StopMe> for RegistryActor {
-    fn handle(&mut self, _msg: StopMe, ctx: &mut cinema::Context<Self>) {
+    fn handle(&mut self, _msg: StopMe, ctx: &mut cineyma::Context<Self>) {
         ctx.stop();
     }
 }
 
 #[tokio::test]
 async fn registry_register_and_lookup() {
-    let sys = cinema::ActorSystem::new();
+    let sys = cineyma::ActorSystem::new();
     let addr = sys.spawn(RegistryActor);
 
     sys.register("my_actor", addr.clone());
 
-    let found: Option<cinema::Addr<RegistryActor>> = sys.lookup("my_actor");
+    let found: Option<cineyma::Addr<RegistryActor>> = sys.lookup("my_actor");
     assert!(found.is_some());
 }
 
 #[tokio::test]
 async fn registry_lookup_nonexistent_returns_none() {
-    let sys = cinema::ActorSystem::new();
+    let sys = cineyma::ActorSystem::new();
 
-    let found: Option<cinema::Addr<RegistryActor>> = sys.lookup("does_not_exist");
+    let found: Option<cineyma::Addr<RegistryActor>> = sys.lookup("does_not_exist");
     assert!(found.is_none());
 }
 
 #[tokio::test]
 async fn registry_auto_unregisters_on_actor_death() {
-    let sys = cinema::ActorSystem::new();
+    let sys = cineyma::ActorSystem::new();
     let addr = sys.spawn(RegistryActor);
 
     sys.register("dying_actor", addr.clone());
 
     // Actor is alive, should be found
-    let found: Option<cinema::Addr<RegistryActor>> = sys.lookup("dying_actor");
+    let found: Option<cineyma::Addr<RegistryActor>> = sys.lookup("dying_actor");
     assert!(found.is_some());
 
     // Stop the actor
@@ -117,7 +117,7 @@ async fn registry_auto_unregisters_on_actor_death() {
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
     // Should be unregistered now
-    let found: Option<cinema::Addr<RegistryActor>> = sys.lookup("dying_actor");
+    let found: Option<cineyma::Addr<RegistryActor>> = sys.lookup("dying_actor");
     assert!(
         found.is_none(),
         "Actor should be auto-unregistered after death"
@@ -126,7 +126,7 @@ async fn registry_auto_unregisters_on_actor_death() {
 
 #[tokio::test]
 async fn registry_manual_does_not_auto_unregister() {
-    let sys = cinema::ActorSystem::new();
+    let sys = cineyma::ActorSystem::new();
     let addr = sys.spawn(RegistryActor);
 
     sys.register_manual("manual_actor", addr.clone());
@@ -138,7 +138,7 @@ async fn registry_manual_does_not_auto_unregister() {
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
 
     // Should still be registered (manual = no auto-unregister)
-    let found: Option<cinema::Addr<RegistryActor>> = sys.lookup("manual_actor");
+    let found: Option<cineyma::Addr<RegistryActor>> = sys.lookup("manual_actor");
     assert!(
         found.is_some(),
         "Manual registration should not auto-unregister"
@@ -146,6 +146,6 @@ async fn registry_manual_does_not_auto_unregister() {
 
     // Manual cleanup
     sys.unregister("manual_actor");
-    let found: Option<cinema::Addr<RegistryActor>> = sys.lookup("manual_actor");
+    let found: Option<cineyma::Addr<RegistryActor>> = sys.lookup("manual_actor");
     assert!(found.is_none());
 }

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use cinema::{
+use cineyma::{
     actor::{AsyncHandler, BoxFuture},
     Actor, ActorSystem, Context, Handler, MailboxError, Message, TimerHandle,
 };
@@ -412,7 +412,9 @@ async fn async_handler_fire_and_forget() {
     let sys = ActorSystem::new();
     let addr = sys.spawn(CounterActor);
 
-    addr.do_send_async(AsyncIncrement(count.clone())).await.unwrap();
+    addr.do_send_async(AsyncIncrement(count.clone()))
+        .await
+        .unwrap();
 
     // Wait for async handler to complete
     tokio::time::sleep(Duration::from_millis(50)).await;

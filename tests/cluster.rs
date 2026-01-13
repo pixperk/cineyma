@@ -1,4 +1,4 @@
-use cinema::{
+use cineyma::{
     remote::{
         cluster::{ClusterNode, Node, NodeStatus},
         ClusterClient, LocalNode, MessageRouter,
@@ -204,20 +204,16 @@ async fn failure_detector_marks_dead_nodes() {
         .await;
 
     // Start periodic gossip with failure detection (check every 100ms, suspect after 200ms)
-    let _handle = node1.clone().start_periodic_gossip(
-        Duration::from_millis(100),
-        Duration::from_millis(200),
-    );
+    let _handle = node1
+        .clone()
+        .start_periodic_gossip(Duration::from_millis(100), Duration::from_millis(200));
 
     // Wait for suspect timeout
     tokio::time::sleep(Duration::from_millis(250)).await;
 
     // Node2 should be marked as SUSPECT
     let members = node1.get_members().await;
-    let node2_status = members
-        .iter()
-        .find(|n| n.id == "node-2")
-        .map(|n| &n.status);
+    let node2_status = members.iter().find(|n| n.id == "node-2").map(|n| &n.status);
     assert_eq!(node2_status, Some(&NodeStatus::Suspect));
     println!("Node 2 marked as SUSPECT");
 
@@ -226,10 +222,7 @@ async fn failure_detector_marks_dead_nodes() {
 
     // Node2 should be marked as DOWN
     let members = node1.get_members().await;
-    let node2_status = members
-        .iter()
-        .find(|n| n.id == "node-2")
-        .map(|n| &n.status);
+    let node2_status = members.iter().find(|n| n.id == "node-2").map(|n| &n.status);
     assert_eq!(node2_status, Some(&NodeStatus::Down));
     println!("Node 2 marked as DOWN");
 }
@@ -287,7 +280,10 @@ async fn actor_registry_spreads_via_gossip() {
     assert_eq!(node_id, "node-1");
     assert_eq!(actor_type, "MyActorType");
 
-    println!("Node 2 successfully discovered actor on Node 1: {:?}", (node_id, actor_type));
+    println!(
+        "Node 2 successfully discovered actor on Node 1: {:?}",
+        (node_id, actor_type)
+    );
 }
 
 #[tokio::test]
@@ -329,10 +325,9 @@ async fn actors_cleaned_up_when_node_goes_down() {
     assert!(node1.lookup_actor("local-actor").await.is_some());
 
     // Start periodic gossip with failure detection (check every 100ms, suspect after 200ms)
-    let _handle = node1.clone().start_periodic_gossip(
-        Duration::from_millis(100),
-        Duration::from_millis(200),
-    );
+    let _handle = node1
+        .clone()
+        .start_periodic_gossip(Duration::from_millis(100), Duration::from_millis(200));
 
     // Wait for node-2 to be marked DOWN (2x suspect = 400ms)
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -344,7 +339,10 @@ async fn actors_cleaned_up_when_node_goes_down() {
 
     // Actor from node-2 should be removed
     let remote_actor = node1.lookup_actor("remote-actor").await;
-    assert!(remote_actor.is_none(), "Actor from DOWN node should be cleaned up");
+    assert!(
+        remote_actor.is_none(),
+        "Actor from DOWN node should be cleaned up"
+    );
 
     // Local actor should still exist
     let local_actor = node1.lookup_actor("local-actor").await;
@@ -368,7 +366,7 @@ async fn cluster_remote_communication() {
     impl Message for Ping {
         type Result = Pong;
     }
-    impl cinema::remote::RemoteMessage for Ping {}
+    impl cineyma::remote::RemoteMessage for Ping {}
 
     #[derive(Clone, ProstMessage)]
     struct Pong {
@@ -378,7 +376,7 @@ async fn cluster_remote_communication() {
     impl Message for Pong {
         type Result = ();
     }
-    impl cinema::remote::RemoteMessage for Pong {}
+    impl cineyma::remote::RemoteMessage for Pong {}
 
     //pingpong actor
     struct PingPong;
@@ -454,7 +452,7 @@ async fn cluster_remote_communication() {
 
     //create cluster client on node1
     let client = ClusterClient::new(node1.clone());
-    let remote: cinema::remote::ClusterRemoteAddr<PingPong> = client.remote_addr("pingpong");
+    let remote: cineyma::remote::ClusterRemoteAddr<PingPong> = client.remote_addr("pingpong");
 
     //test low-level send (returns envelope)
     let response = remote

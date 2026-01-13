@@ -4,7 +4,7 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use cinema::{Actor, ActorSystem, Context, StreamHandler};
+use cineyma::{Actor, ActorSystem, Context, StreamHandler};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
@@ -109,7 +109,10 @@ async fn stream_finished_calls_hook() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     assert_eq!(count.load(Ordering::SeqCst), 2);
-    assert!(finished.load(Ordering::SeqCst), "finished() should be called");
+    assert!(
+        finished.load(Ordering::SeqCst),
+        "finished() should be called"
+    );
 }
 
 // ======== Multiple Streams ========

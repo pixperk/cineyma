@@ -1,7 +1,7 @@
 .PHONY: help test bench bench-quick clean
 
 help:
-	@echo "Cinema Actor Framework - Available targets:"
+	@echo "cineyma Actor Framework - Available targets:"
 	@echo ""
 	@echo "  make test          - run all tests"
 	@echo "  make bench         - run all benchmarks (full suite, ~10 min)"
