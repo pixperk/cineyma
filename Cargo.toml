@@ -36,7 +36,7 @@ rand = "0.9.2"
 prost-build = "0.14"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+criterion = { version = "0.8", features = ["async_tokio", "html_reports"] }
 
 [[bench]]
 name = "actor_spawn"
